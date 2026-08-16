@@ -11,6 +11,8 @@ RemoteHarness:在 iPad 上获得与本地一致的「远程 chat」体验——�
 | [03-security.md](03-security.md) | 安全分层模型与已实现加固 |
 | [04-testing.md](04-testing.md) | 测试矩阵与命令(含无 iPad 的测试方法) |
 | [05-progress.md](05-progress.md) | 当前进度(M1 完成)与下一步(M2+) |
+| [06-multi-agent.md](06-multi-agent.md) | 多 Agent 调研(grok / deepseek-harness / codex) |
+| [07-bilink-design.md](07-bilink-design.md) | Bilink(比邻)App 设计(鉴权门/聊天/会话) |
 | 项目根 `HANDOFF.md` | 交接总览(概述、背景调研、里程碑、开放问题) |
 
 ## 代码结构
