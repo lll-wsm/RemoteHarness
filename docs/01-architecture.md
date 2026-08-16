@@ -11,7 +11,7 @@
 ## 2. 总体架构(定稿)
 
 ```
-iPad (MoCi, ACP 客户端)
+iPad (Bilink, ACP 客户端)
   │  ACP JSON-RPC over WebSocket + token 鉴权
   ▼
 远程桥 (daemon, Mac/Linux, Node.js)
@@ -37,7 +37,7 @@ grok 会话(远程文件系统/终端/工具;Plan Mode / Rewind / 持久化 / �
 | D3 | **桥语言:Node.js** | 跨 Mac/Linux 的守护进程;WebSocket + JSON-RPC 生态成熟 | 协议胶水代码开发最快;不依赖 grok-build 的 Rust crate,按协议通信即可 |
 | D4 | **grok 驱动:agent serve** | 桥作为 ACP 客户端连 grok 自带的 `grok agent serve`(`ws://127.0.0.1:2419/ws?server-key=<secret>`) | SessionActor(会话持久化/压缩/Plan Mode/Rewind)全部复用,桥不重复实现 |
 | D5 | **会话语义** | 一个「远程 chat」= 远程一个持续 grok 会话(chatID 为稳定标识) | 与本地 chat 的持续会话一致;桥重启后按 chatID 经 session/load 恢复 |
-| D6 | **客户端 = 独立 iPad App** | 新建独立 SwiftUI App(不并入 MoCi;MoCi 已在用),名称待定 | 不影响 MoCi 现有功能;独立演进、独立发布 |
+| D6 | **客户端 = Bilink(比邻,独立 iPad App)** | 新建独立 SwiftUI App,不并入 MoCi(MoCi 已在用);「天涯若比邻」——远程机器如邻座 | 不影响 MoCi 现有功能;独立演进、独立发布 |
 | D7 | **第三方 API 鉴权** | grok 用第三方 OpenAI 兼容端点 + env_key(如 OPENCODE_API_KEY),不登录 xAI | 服务器/CI 场景不需要浏览器 OAuth;经 `grok -m <模型段名> agent serve` 指定模型 |
 
 ## 4. 桥组件职责(bridge/src)

@@ -9,7 +9,7 @@
 - [x] 桥形态:厚桥(Node.js daemon,跑在远程 Mac/Linux);
 - [x] grok 驱动方式:`grok agent serve`(ACP),非 headless;
 - [x] 会话语义:一个 remote chat = 一个持续 grok 会话(chatID 稳定标识);
-- [x] 客户端定位:独立 iPad App(不并入 MoCi;MoCi 已在用),名称待定;
+- [x] 客户端定位:Bilink(比邻,独立 iPad App;不并入 MoCi,MoCi 已在用);
 - [x] 无 xAI 登录:grok 走第三方 OpenAI 兼容端点(env_key 配置,`-m` 选模型)——已实测。
 
 ### 桥(RemoteHarness/bridge)
@@ -35,8 +35,8 @@
 
 ## 3. 下一步(M2 起)
 
-### M2:独立 iPad App(ACP 客户端)(下一个里程碑)
-1. 新建 SwiftUI App 工程(目录 `ios-app/`),实现 ACP 客户端(`URLSessionWebSocketTask`),含:
+### M2:Bilink(比邻)独立 iPad App(下一个里程碑)
+1. 新建 SwiftUI App 工程(目录 `Bilink/`),实现 ACP 客户端(`URLSessionWebSocketTask`),含:
    - **鉴权门**:连接设置页(URL + token)→ initialize 握手 → 成功才进入聊天,失败留在连接页显示具体错误(401=token 错 / 超时=地址不可达);
    - **流式渲染**:把 `session/update` 事件(user_message_chunk / agent_thought_chunk / agent_message_chunk)映射到 ChatStore / MessageBubble;
    - **会话管理**:记住 chatID,断线重连后 `session/load` 恢复;重连重新鉴权;

@@ -23,4 +23,5 @@ RemoteHarness/
     ├── src/            # 桥源码(见 01-architecture.md)
     ├── scripts/        # start.sh / e2e.mjs / smoke.mjs / gen-token.mjs
     └── README.md       # 桥的启动与协议说明
+└── Bilink/             # 独立 iPad App「比邻」(ACP 客户端,名称:比邻 Bilink)—— M2 起
 ```
