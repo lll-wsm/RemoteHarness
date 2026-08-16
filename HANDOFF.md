@@ -23,7 +23,7 @@
 2. **headless**(脚本/CI 一次性执行)—— 支持 `-r/--resume`、`-c/--continue`、`-s/--session-id` 恢复会话,可作为过渡,但每次起新进程、加载成本高;
 3. **ACP(Agent Client Protocol)** —— **官方为编辑器嵌入设计的 JSON-RPC 协议**,grok 有完整 ACP 会话实现(`crates/codegen/xai-grok-shell/src/session/acp_session*.rs`,`SessionActor` 管理 turn/提示队列/Plan Mode/Rewind),支持**通过 ACP WebSocket 多路复用终端 I/O**。这是「外部客户端驱动 grok 并看输出」的官方接口,体验上限最高。grok 自带 `agent serve` 子命令:监听 `127.0.0.1:2419`,`--secret`/`GROK_AGENT_SECRET` 鉴权,WebSocket URL 为 `ws://<addr>/ws?server-key=<secret>`(见 `xai-grok-pager-bin/src/main.rs::print_serve_startup_info`)。
 
-### 2.2 MoCi 现状(客户端接缝)
+### 2.2 MoCi 现状(参考:聊天 UX 与 Provider 抽象思路)
 
 - iPad-only、SwiftUI、BYOK、无后端,工作区为纯文本文件;
 - 已有聊天基础设施:`.chat` 文件、`ChatStore`(多轮工具循环、流式)、`MessageBubble` UI、`LLMProvider` 抽象(OpenAI 兼容 / Anthropic);
@@ -45,7 +45,7 @@
 ## 4. 架构(已定稿:路线 A,ACP 端到端,厚桥)
 
 ```
-iPad (MoCi, ACP 客户端)
+iPad (独立 App, ACP 客户端)
   │  ACP JSON-RPC over WebSocket + token 鉴权
   ▼
 远程桥 (daemon, Mac/Linux, Node.js)
@@ -63,11 +63,11 @@ grok 会话(远程文件系统/终端/工具;Plan Mode / Rewind / 持久化 / �
 ```
 
 **协议决策(2026-08-16 确认)**:
-- 采用**路线 A**:客户端(MoCi)实现 ACP 客户端直连桥,**一步到位,不做路线 B**(OpenAI 兼容 SSE)过渡,避免后续协议迁移的双重成本;
+- 采用**路线 A**:客户端(独立 App)实现 ACP 客户端直连桥,**一步到位,不做路线 B**(OpenAI 兼容 SSE)过渡,避免后续协议迁移的双重成本;
 - 桥采用**厚桥**:自己实现 ACP 服务端与会话管理(而非薄代理);
 - 桥实现语言:**Node.js**;
 - grok 驱动方式:桥作为 ACP 客户端连 grok 自带的 `agent serve`;
-- 客户端 = MoCi(以 `LLMProvider` 抽象为接缝),验证后并入。
+- 客户端 = **独立 iPad App(不并入 MoCi;MoCi 已在用)**,名称待定(工程目录 `ios-app/`)。
 
 ---
 
@@ -94,7 +94,7 @@ RemoteHarness/
     │   ├── e2e.mjs             # 模拟 iPad 完整流程(流式)
     │   └── gen-token.mjs       # 128-bit 强 token 生成
     └── README.md
-└── ios-app/           # MoCi(ACP 客户端)—— M2 起
+└── ios-app/           # 独立 iPad App(ACP 客户端,名称待定)—— M2 起
 ```
 
 ---
@@ -102,9 +102,9 @@ RemoteHarness/
 ## 6. 里程碑
 
 1. **M1 桥(ACP 端到端)✅ 完成(2026-08-16)**:bridge 起 ACP WebSocket 服务 + token 鉴权;内部 ACP 客户端连 grok agent serve;跑通 initialize → session/new → session/prompt → session/update 流式;真实 grok(opencode-deepseek-v4-flash)逐字流式回复验证通过。**校准要点**:ACP 0.10.4 JSON 字段为 camelCase(`sessionId`/`mcpServers`/`protocolVersion`);`initialize` 必须带 `protocolVersion`+`clientCapabilities`;`session/prompt` 参数为 `{sessionId, prompt:[{type:"text",text}]}`;流式事件为 `session/update` 通知(`params.sessionId` + `params.update.sessionUpdate` 区分 user_message_chunk/agent_thought_chunk/agent_message_chunk 等);会话持久化在 grok 侧(`~/.grok/sessions/<cwd>/<session_id>/`);
-2. **M2 MoCi ACP 客户端**:在 MoCi 实现 ACP 客户端(URLSessionWebSocketTask);**鉴权门**:连接设置页(URL + token)→ initialize 握手 → 成功才进入聊天,失败留在连接页显示错误;局域网先跑通;
+2. **M2 独立 iPad App(ACP 客户端)**:新建 SwiftUI App;实现 ACP 客户端(URLSessionWebSocketTask);**鉴权门**:连接设置页(URL + token)→ initialize 握手 → 成功才进入聊天,失败留在连接页显示错误;局域网先跑通;
 3. **M3 会话与工具**:chatID 持久会话、工具活动/终端输出渲染、token 配置 UI、隧道连接;
-4. **M4 决策**:验证 OK 后,把客户端并入 MoCi(或按评估继续独立)。
+4. **M4 发布决策**:验证 OK 后进入正式发布准备(TestFlight / App Store);视评估决定是否延伸 Mac 客户端。
 
 ---
 
@@ -121,7 +121,7 @@ RemoteHarness/
 
 ## 8. 开放问题(2026-08-16 更新)
 
-1. ~~独立 App 定位~~ → **已定**:客户端 = MoCi 的 ACP 实现(LLMProvider 抽象为接缝),验证后并入;
+1. ~~独立 App 定位~~ → **已定**:客户端 = **独立 iPad App**(不并入 MoCi;MoCi 已在用),名称待定;
 2. ~~会话语义~~ → **已确认**:一个 remote chat = 一个持续 grok 会话;
 3. ~~桥的语言~~ → **已定**:Node.js;
 4. ~~协议取舍~~ → **已定**:路线 A(ACP 端到端),不做路线 B;
@@ -148,4 +148,4 @@ RemoteHarness/
 ## 10. 下一步建议
 
 1. 完成 M1:在远程机器启动 `grok agent serve`,跑通 bridge 的 ACP 端到端验证(initialize → session/new → prompt → update 流);
-2. 验证通过后进入 M2:MoCi ACP 客户端。
+2. 验证通过后进入 M2:独立 iPad App(ACP 客户端)。
