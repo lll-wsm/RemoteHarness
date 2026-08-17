@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 聊天页:M2.2 完整实现——消息列表(流式)+ 输入栏 + 状态条;M2.3 会话管理——历史会话列表。
+/// 聊天页:消息列表(流式)+ 输入栏 + 状态条;历史会话列表(切换/新建/删除/重命名/远端发现)。
 struct ChatView: View {
     @Bindable var store: ConnectionStore
     let config: ConnectionConfig
@@ -19,7 +19,7 @@ struct ChatView: View {
         }
         .task {
             if chatStore == nil, let client = store.client {
-                let chat = ChatStore(client: client, connectionURL: config.url,
+                let chat = ChatStore(client: client, profileID: config.profileID,
                                      sessionStore: sessionStore)
                 // 断线重连成功后重新加载会话
                 store.onReconnected = { Task { await chat.prepareSession() } }
@@ -41,7 +41,7 @@ struct ChatView: View {
         .sheet(isPresented: $showSessions) {
             if let chatStore {
                 SessionListView(
-                    sessions: sessionStore.sessions(for: config.url),
+                    sessions: sessionStore.sessions(for: config.profileID),
                     currentChatID: chatStore.chatID,
                     onSelect: { meta in
                         showSessions = false
@@ -52,12 +52,13 @@ struct ChatView: View {
                         Task { await chatStore.startNewSession() }
                     },
                     onDelete: { meta in
-                        sessionStore.delete(chatID: meta.chatID)
-                        if chatStore.chatID == meta.chatID {
-                            Task { await chatStore.startNewSession() }
-                        }
+                        Task { await chatStore.deleteSession(chatID: meta.chatID) }
+                    },
+                    onRename: { meta, title in
+                        chatStore.renameSession(chatID: meta.chatID, to: title)
                     }
                 )
+                .task { await chatStore.syncRemoteSessions() }
             }
         }
     }

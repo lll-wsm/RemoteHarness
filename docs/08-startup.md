@@ -43,7 +43,7 @@ cd RemoteHarness/bridge
 |---|---|---|
 | `GROK_SERVE_SECRET` | 自动生成 | serve 与桥共用;脚本启动时打印长度,复用请显式传入 |
 | `BRIDGE_TOKEN` | 自动生成 | **启动时打印,填到 iPad 连接页**;复用请显式传入 |
-| `GROK_MODEL` | glm-5-2 | config.toml 的 `[model.xxx]` 段名 |
+| `GROK_MODEL` | glm-5-2 | **注意:serve 实际模型由 `~/.grok/config.toml` 的 `[models].default` 决定,`-m` 参数不生效**;换模型改配置文件后重启 serve |
 | `PROBE` | 0 | `PROBE=1` 时先用 `grok -p` 探测模型可用性(余额不足提前报错) |
 | `TUNNEL` | 1 | `TUNNEL=0` 跳过 cloudflared,仅局域网 |
 | `BRIDGE_PORT` / `GROK_SERVE_PORT` | 8777 / 2419 | 端口 |
@@ -158,7 +158,7 @@ kill <bridge_pid> <grok_serve_pid>   # cloudflared 同理会话结束才停
 
 | 现象 | 原因与处理 |
 |---|---|
-| 会话错误横幅 "API 额度不足" | 模型账户余额耗尽(402);换 `grok -m <其他段名> -p "hi"` 探测可用模型后重启 serve。DeepSeek 直连 / opencode 网关当前均欠费,推荐 `glm-5-2` |
+| 会话错误横幅 "API 额度不足" | 模型账户余额耗尽(402);换可用模型:`~/.grok/config.toml` 的 `[models].default` 改为有余额的段名(如 `glm-5-2`)后重启 serve。**`grok -m` 只影响交互 CLI,对 `agent serve` 无效**。DeepSeek 直连 / opencode 网关当前均欠费,GLM Ark(glm-5-2)可用 |
 | `session/new` 返回 Invalid params | 客户端会话未创建成功(M2.5 之前的 isPreparing 拦截 bug 已修);确认桥日志无异常、serve 已就绪 |
 | 重开 App 变"新会话" | 老版本行为;M2.5 起恢复最近会话,`session/load` 失败也会保留本地历史并提示 |
 | 桥启动即退出 | 未设 `BRIDGE_TOKEN`/`GROK_SERVE_SECRET`(fail-closed);检查环境变量 |

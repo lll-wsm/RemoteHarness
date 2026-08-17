@@ -1,11 +1,11 @@
 import Foundation
 import Observation
 
-/// 聊天状态:会话创建/恢复(session/new 或 session/load)、发送(session/prompt)、
-/// 流式事件组装(session/update → 消息追加)、停止(session/cancel)。
-/// 会话目录由 SessionStore 持久化(index.json),消息记录持久化在
-/// BilinkSessions/<chatID>.json;App 重开/重连后自动恢复最近会话,
-/// 远程不可用时保留本地历史并提示,不静默新建。
+/// 聊天状态:会话创建/恢复(session/new、session/load 或桥上远端发现)、
+/// 发送(session/prompt)、流式事件组装(session/update → 消息追加)、
+/// 停止(session/cancel)、删除/重命名/远端同步。
+/// 会话目录与消息记录由 SessionStore 持久化;App 重开/重连按 profileID 三级恢复:
+/// 本地最近会话 → 桥上发现的远端会话 → 新建。
 @Observable
 final class ChatStore {
     private(set) var messages: [ChatMessage] = []
@@ -18,14 +18,14 @@ final class ChatStore {
     var errorMessage: String?
 
     private let client: ACPClient
-    private let connectionURL: String
-    private let sessionStore: SessionStore?
+    private let profileID: UUID
+    private let sessionStore: SessionStore
     private var isPreparing = false
     private var replayEndTask: Task<Void, Never>?
 
-    init(client: ACPClient, connectionURL: String, sessionStore: SessionStore? = nil) {
+    init(client: ACPClient, profileID: UUID, sessionStore: SessionStore) {
         self.client = client
-        self.connectionURL = connectionURL
+        self.profileID = profileID
         self.sessionStore = sessionStore
         client.onNotification = { [weak self] notification in
             self?.handle(notification)
@@ -33,38 +33,38 @@ final class ChatStore {
         Task { await self.prepareSession() }
     }
 
-    private var chatIDKey: String {
-        "bilink.chatID.\(connectionURL)"
-    }
-
-    private var storedChatID: String? {
-        get { UserDefaults.standard.string(forKey: chatIDKey) }
-        set { UserDefaults.standard.set(newValue, forKey: chatIDKey) }
-    }
-
     // MARK: - 会话
 
-    /// 建立或恢复远程会话:优先恢复该连接最近使用的会话(会话目录),
-    /// 目录为空时回退 UserDefaults(兼容旧版本)。初始化与重连后调用。
+    /// 建立或恢复远程会话(三级):本地最近会话 → 桥上发现的远端会话 → 新建。
+    /// 初始化与重连后调用。
     func prepareSession() async {
         guard !isPreparing else { return }
         isPreparing = true
         defer { isPreparing = false }
         errorMessage = nil
-        let stored = sessionStore?.latest(for: connectionURL) ?? storedChatID
-        if let stored {
+        if let stored = sessionStore.latest(for: profileID) {
             await resume(chatID: stored)
+        } else if let remote = await syncRemoteSessions() {
+            let ok = await resume(chatID: remote)
+            if !ok {
+                // 桥上发现但已失效(已移除死条目),直接新建
+                await createSession()
+            }
         } else {
             await createSession()
         }
     }
 
-    /// 从历史列表切换到指定会话。
+    /// 从历史列表切换到指定会话;切换前先取消旧会话的在途 turn。
     func switchTo(chatID stored: String) async {
         guard stored != chatID else { return }
         guard !isPreparing else { return }
         isPreparing = true
         defer { isPreparing = false }
+        // 在途 turn:先取消旧会话(桥的 cancel 按当前绑定注入,切走后将无法取消)
+        if isResponding {
+            _ = try? await client.send("session/cancel")
+        }
         resetTurn()
         await resume(chatID: stored)
     }
@@ -85,8 +85,7 @@ final class ChatStore {
             let result = try await client.send("session/new", params: .acp([:]))
             if let object = result?.objectValue, let id = object["chatID"]?.stringValue {
                 chatID = id
-                storedChatID = id
-                sessionStore?.touch(chatID: id, connectionURL: connectionURL, messages: [])
+                sessionStore.touch(chatID: id, profileID: profileID, messages: [])
             }
             isSessionReady = true
         } catch {
@@ -95,23 +94,33 @@ final class ChatStore {
         }
     }
 
-    /// 恢复指定会话:本地历史先行,再 session/load 接回远程上下文。
-    /// 远程加载失败时保留本地历史(远程会话可能已随桥重启丢失)。
-    private func resume(chatID stored: String) async {
+    /// 恢复指定会话:本地历史优先,再 session/load 接回远程上下文。
+    /// 返回是否成功;桥上发现条目失败视为死会话,移除并提示。
+    @discardableResult
+    private func resume(chatID stored: String) async -> Bool {
         chatID = stored
         // 本地历史优先(已实例化的 grok 会话不再回放,界面历史必须本地持久)
         messages = loadLocalHistory()
+        let isRemoteOnly = sessionStore.meta(chatID: stored)?.isRemoteOnly == true
         do {
             _ = try await client.send("session/load", params: .acp(["chatID": stored]))
             isSessionReady = true
-            // 本地无历史时才依赖 grok 回放(如 App 重装后)
+            // 本地无历史(远端发现/重装)时依赖 grok 回放
             if messages.isEmpty {
                 startReplayWindow()
             }
+            return true
         } catch {
             isSessionReady = false
             isReplayingHistory = false
-            errorMessage = "远程会话不可用,可在历史会话中新建(本地记录已保留)"
+            if isRemoteOnly {
+                // 注册表有记录但 grok 侧已失效(如 serve 重启):移除死条目
+                sessionStore.delete(chatID: stored)
+                errorMessage = "远端会话已失效,已从列表移除"
+            } else {
+                errorMessage = "远程会话不可用,本地记录已保留,可新建会话"
+            }
+            return false
         }
     }
 
@@ -134,6 +143,41 @@ final class ChatStore {
             guard !Task.isCancelled else { return }
             await MainActor.run { self?.isReplayingHistory = false }
         }
+    }
+
+    // MARK: - 会话管理入口
+
+    /// 远端同步:桥 sessions/list → 合并进目录;返回最新的桥上发现条目(供 prepare 恢复)。
+    @discardableResult
+    func syncRemoteSessions() async -> String? {
+        do {
+            let result = try await client.send("sessions/list", params: .acp([:]))
+            guard let sessions = result?.objectValue?["sessions"]?.arrayValue else { return nil }
+            sessionStore.mergeRemote(records: sessions.compactMap { $0.objectValue },
+                                     profileID: profileID)
+            return sessionStore.latestRemoteOnly(for: profileID)
+        } catch {
+            return nil
+        }
+    }
+
+    /// 删除会话:需在线(桥 sessions/remove → 本地清理);目标是当前会话时随后新建。
+    /// 断线时保留本地并提示,不做"仅删本地"。
+    func deleteSession(chatID target: String) async {
+        do {
+            _ = try await client.send("sessions/remove", params: .acp(["chatID": target]))
+            sessionStore.delete(chatID: target)
+            if target == chatID {
+                await startNewSession()
+            }
+        } catch {
+            errorMessage = "删除失败:需在线删除(本地记录已保留)"
+        }
+    }
+
+    /// 重命名会话(本地与桥上发现条目均可)。
+    func renameSession(chatID target: String, to newTitle: String) {
+        sessionStore.rename(chatID: target, to: newTitle)
     }
 
     // MARK: - 本地历史持久化
@@ -183,10 +227,10 @@ final class ChatStore {
         _ = try? await client.send("session/cancel")
     }
 
-    /// 消息变化后同步会话目录(标题/摘要/时间)。
+    /// 消息变化后同步会话目录(标题/摘要/时间;远端条目首条消息后翻转)。
     private func touchSessionMeta() {
         guard let chatID else { return }
-        sessionStore?.touch(chatID: chatID, connectionURL: connectionURL, messages: messages)
+        sessionStore.touch(chatID: chatID, profileID: profileID, messages: messages)
     }
 
     // MARK: - 事件处理

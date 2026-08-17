@@ -1,8 +1,9 @@
 import Foundation
 import Observation
 
-/// 历史会话目录:跨进程持久化所有会话的元数据(index.json),
-/// 提供按连接地址过滤、最近会话优先,以及删除(同时清理本地消息文件)。
+/// 历史会话目录:跨进程持久化所有会话的元数据(index.json),按 profileID 归属;
+/// 支持重命名、级联删除(profile/会话)与桥上远端合并(跨 profile 按 chatID 去重)。
+/// 消息记录持久化在 BilinkSessions/<chatID>.json(按 chatID 扁平,同桥多 profile 共享)。
 @Observable
 final class SessionStore {
     private(set) var sessions: [SessionMeta] = []
@@ -23,30 +24,45 @@ final class SessionStore {
 
     // MARK: - 查询
 
-    /// 指定连接地址的会话,按最近更新倒序。
-    func sessions(for url: String) -> [SessionMeta] {
-        sessions.filter { $0.connectionURL == url }
+    /// 指定 profile 的会话,按最近更新倒序。
+    func sessions(for profileID: UUID) -> [SessionMeta] {
+        sessions.filter { $0.profileID == profileID }
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
-    /// 该连接地址最近使用的会话,用于 App 重开/重连时自动恢复。
-    func latest(for url: String) -> String? {
-        sessions(for: url).first?.chatID
+    /// 该 profile 最近使用过的本地会话(排除桥上发现条目,用于自动恢复)。
+    func latest(for profileID: UUID) -> String? {
+        sessions(for: profileID).first { !$0.isRemoteOnly }?.chatID
+    }
+
+    /// 桥上发现的最新条目(仅 isRemoteOnly),供 prepareSession 的远端恢复分支。
+    func latestRemoteOnly(for profileID: UUID) -> String? {
+        sessions(for: profileID).first { $0.isRemoteOnly }?.chatID
+    }
+
+    func meta(chatID: String) -> SessionMeta? {
+        sessions.first { $0.chatID == chatID }
     }
 
     // MARK: - 更新
 
     /// 会话消息变化时刷新元数据;首次出现时创建条目。
-    /// 标题取首个用户消息,建立后保持不变。
-    func touch(chatID: String, connectionURL: String, messages: [ChatMessage], now: Date = Date()) {
+    /// 标题取首个用户消息;「新会话」/「远端会话」占位符在首条消息到达后补全。
+    /// isRemoteOnly 在本地首条消息落盘后翻转为 false(移出「桥上发现」分段)。
+    func touch(chatID: String, profileID: UUID, messages: [ChatMessage], now: Date = Date()) {
         let preview = messages.last.map {
             $0.role == .user ? "👤 \($0.text)" : "🤖 \($0.text)"
         }
         if let index = sessions.firstIndex(where: { $0.chatID == chatID }) {
             var meta = sessions[index]
-            // 空消息预建的条目(标题"新会话")在首条用户消息到达时补全标题
-            if meta.title == "新会话", let first = messages.first(where: { $0.role == .user }) {
-                meta.title = truncate(first.text)
+            if let first = messages.first(where: { $0.role == .user }) {
+                // 占位标题(新会话/远端会话/远端发现时的 cwd 末段)在首条消息后补全
+                if meta.isRemoteOnly || meta.title == "新会话" || meta.title == "远端会话" {
+                    meta.title = truncate(first.text)
+                }
+            }
+            if meta.isRemoteOnly && !messages.isEmpty {
+                meta.isRemoteOnly = false
             }
             meta.updatedAt = now
             meta.preview = preview
@@ -61,17 +77,65 @@ final class SessionStore {
             }
             sessions.append(SessionMeta(chatID: chatID, title: title, preview: preview,
                                         messageCount: messages.count, createdAt: now,
-                                        updatedAt: now, connectionURL: connectionURL))
+                                        updatedAt: now, profileID: profileID))
         }
+        save()
+    }
+
+    /// 重命名会话(本地与桥上发现条目均可)。
+    func rename(chatID: String, to newTitle: String) {
+        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let index = sessions.firstIndex(where: { $0.chatID == chatID }) else { return }
+        sessions[index].title = truncate(trimmed)
         save()
     }
 
     /// 删除会话:移除目录条目与本地消息文件。
     func delete(chatID: String) {
         sessions.removeAll { $0.chatID == chatID }
-        let file = dir.appendingPathComponent("\(chatID).json")
-        try? FileManager.default.removeItem(at: file)
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(chatID).json"))
         save()
+    }
+
+    /// 删除 profile 时级联清除其全部会话条目与消息文件。
+    func removeProfile(profileID: UUID) {
+        let chatIDs = sessions.filter { $0.profileID == profileID }.map(\.chatID)
+        sessions.removeAll { $0.profileID == profileID }
+        for chatID in chatIDs {
+            try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(chatID).json"))
+        }
+        save()
+    }
+
+    /// 合并桥上发现的远端会话(sessions/list 结果):
+    /// 跨 profile 按 chatID 去重(同桥双 profile 不产生双条目);本地没有的
+    /// 创建 isRemoteOnly 条目,标题回退链:cwd 末段 > "远端会话"。
+    func mergeRemote(records: [[String: AnyCodable]], profileID: UUID) {
+        var changed = false
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        for record in records {
+            guard let chatID = record["chatID"]?.stringValue,
+                  !sessions.contains(where: { $0.chatID == chatID }) else { continue }
+            let title: String
+            if let cwd = record["cwd"]?.stringValue,
+               let last = cwd.split(separator: "/").last, !last.isEmpty {
+                title = truncate(String(last))
+            } else {
+                title = "远端会话"
+            }
+            let createdAt = record["createdAt"]?.stringValue
+                .flatMap { formatter.date(from: $0) } ?? Date()
+            sessions.append(SessionMeta(chatID: chatID, title: title,
+                                        preview: "桥上发现", messageCount: 0,
+                                        createdAt: createdAt, updatedAt: createdAt,
+                                        profileID: profileID, isRemoteOnly: true))
+            changed = true
+        }
+        if changed {
+            save()
+        }
     }
 
     // MARK: - 持久化

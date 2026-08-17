@@ -99,6 +99,12 @@ export class AcpServer {
         case "session/close":
           await this.handleSessionClose(ws, msg);
           break;
+        case "sessions/list":
+          this.handleSessionsList(ws, msg);
+          break;
+        case "sessions/remove":
+          await this.handleSessionsRemove(ws, msg);
+          break;
         default:
           // session/prompt、session/cancel、session/rewind 等直接转发
           await this.forwardToGrok(ws, msg);
@@ -115,14 +121,47 @@ export class AcpServer {
       mcpServers: msg.params?.mcpServers ?? [],
     };
     const resp = await this.grok.request("session/new", params);
-    const sessionId = resp.result?.sessionId ?? null;
-    if (sessionId) this.sessions.bindGrokSession(record.chatID, sessionId);
-    this.bindConn(ws, record.chatID, sessionId);
     if (resp.error) {
+      // 失败回滚:不留 grokSessionId=null 的孤儿记录(永远无法 load)
+      this.sessions.remove(record.chatID);
       this.replyError(ws, msg.id, resp.error.code ?? -32603, resp.error.message ?? "grok 错误");
       return;
     }
+    const sessionId = resp.result?.sessionId ?? null;
+    if (sessionId) this.sessions.bindGrokSession(record.chatID, sessionId);
+    this.bindConn(ws, record.chatID, sessionId);
     this.reply(ws, msg.id, { ...(resp.result ?? {}), chatID: record.chatID });
+  }
+
+  // 本地扩展:列出桥注册表中可恢复的全部会话(只读,不经 grok;断连时也可用)。
+  handleSessionsList(ws, msg) {
+    this.reply(ws, msg.id, {
+      sessions: this.sessions.list()
+        .filter((r) => Boolean(r.grokSessionId))
+        .map((r) => ({
+          chatID: r.chatID,
+          cwd: r.cwd,
+          createdAt: r.createdAt,
+          restorable: true,
+        })),
+    });
+  }
+
+  // 本地扩展:按 chatID 删除注册表记录并尽力关闭远端 grok 会话(失败不阻塞)。
+  async handleSessionsRemove(ws, msg) {
+    const chatID = msg.params?.chatID;
+    const record = chatID ? this.sessions.get(chatID) : null;
+    if (!record) return this.replyError(ws, msg.id, -32602, `未知会话: ${chatID}`);
+    if (record.grokSessionId) {
+      try {
+        await this.grok.request("session/close", { sessionId: record.grokSessionId });
+      } catch (err) {
+        console.warn(`[bridge] sessions/remove: grok close 失败(忽略): ${err.message}`);
+      }
+    }
+    this.sessions.remove(chatID);
+    if (this.connSessions.get(ws) === chatID) this.unbindConn(ws, chatID); // 删的是当前绑定会话时解绑
+    this.reply(ws, msg.id, { ok: true });
   }
 
   async handleSessionLoad(ws, msg) {

@@ -7,4 +7,5 @@ struct ConnectionConfig: Codable, Equatable {
     var url: String      // ws:// 或 wss://
     var token: String
     var agent: String = "grok"   // 多 agent 预留(默认 grok)
+    var profileID: UUID
 }

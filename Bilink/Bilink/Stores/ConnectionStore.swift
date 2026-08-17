@@ -36,6 +36,8 @@ final class ConnectionStore {
         client?.onDisconnect = nil
         client?.close()
         client = nil
+        // 清掉旧 ChatStore 注册的重连回调:切换 profile 后防误触发旧会话 reload
+        onReconnected = nil
         state = .idle
     }
 
