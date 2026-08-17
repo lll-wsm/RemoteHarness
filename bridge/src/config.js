@@ -1,4 +1,7 @@
 import os from "node:os";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 // 全部配置来自环境变量,默认值适合局域网开发。
 // 桥与被控端 grok 同机,通过回环地址连接 agent serve。
@@ -8,7 +11,17 @@ const allowNoAuth = process.env.BRIDGE_ALLOW_NO_AUTH === "1";
 const bindHost = process.env.BRIDGE_BIND ?? "127.0.0.1";
 const grokServeUrl = process.env.GROK_SERVE_URL ?? "ws://127.0.0.1:2419";
 const grokServeSecret = process.env.GROK_SERVE_SECRET ?? "";
-const encryptKey = process.env.BRIDGE_ENCRYPT_KEY ?? ""; // 非空 = 开启「加密必需」模式(应用层 AES-GCM)
+const bridgeDir = path.dirname(fileURLToPath(import.meta.url)) + "/..";
+// 加密密钥:显式值 > auto(读/由 start-all 生成的 .encrypt-key,防字面 "auto" 当密钥)
+let encryptKey = process.env.BRIDGE_ENCRYPT_KEY ?? "";
+if (encryptKey === "auto") {
+  try {
+    encryptKey = fs.readFileSync(path.join(bridgeDir, ".encrypt-key"), "utf8").trim();
+  } catch {
+    encryptKey = "";
+    console.warn("[config] BRIDGE_ENCRYPT_KEY=auto 但未找到 .encrypt-key,请用 scripts/start-all.sh 生成");
+  }
+}
 const registryFile = process.env.BRIDGE_REGISTRY_FILE ?? "sessions.json";
 const defaultCwd = process.env.BRIDGE_CWD ?? os.homedir(); // 远程 grok 会话的工作目录兜底
 const allowIps = (process.env.BRIDGE_ALLOW_IPS ?? "")
