@@ -24,11 +24,6 @@ struct ProfileListView: View {
                         ForEach(profileStore.profiles) { profile in
                             row(profile)
                         }
-                        .onDelete { indexSet in
-                            if let index = indexSet.first {
-                                deletingProfile = profileStore.profiles[index]
-                            }
-                        }
                     }
                     .confirmationDialog(
                         "删除该机器?",
@@ -77,31 +72,45 @@ struct ProfileListView: View {
     }
 
     private func row(_ profile: ConnectionProfile) -> some View {
-        Button {
-            connect(profile)
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text(profile.name)
-                        .font(.headline)
-                        .lineLimit(1)
-                    if store.state == .connecting, store.config?.profileID == profile.id {
-                        ProgressView()
-                            .controlSize(.small)
+        HStack(spacing: 10) {
+            // 点击行主体 → 连接
+            Button {
+                connect(profile)
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text(profile.name)
+                            .font(.headline)
+                            .lineLimit(1)
+                        if store.state == .connecting, store.config?.profileID == profile.id {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
                     }
+                    Text(profile.url)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Text("\(sessionStore.sessions(for: profile.id).count) 个会话"
+                         + (profile.lastUsedAt.map { " · 最后使用 \($0.formatted(date: .abbreviated, time: .shortened))" } ?? ""))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                 }
-                Text(profile.url)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Text("\(sessionStore.sessions(for: profile.id).count) 个会话"
-                     + (profile.lastUsedAt.map { " · 最后使用 \($0.formatted(date: .abbreviated, time: .shortened))" } ?? ""))
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                .padding(.vertical, 2)
             }
-            .padding(.vertical, 2)
+            .buttonStyle(.plain)
+            // 常驻可见的编辑按钮:任何输入方式都可直接进入编辑
+            Button {
+                editingProfile = profile
+                showEditor = true
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("编辑 \(profile.name)")
         }
-        .buttonStyle(.plain)
         .swipeActions(edge: .leading) {
             Button {
                 editingProfile = profile
@@ -110,6 +119,13 @@ struct ProfileListView: View {
                 Label("编辑", systemImage: "pencil")
             }
             .tint(.orange)
+        }
+        .swipeActions(edge: .trailing) {
+            Button(role: .destructive) {
+                deletingProfile = profile
+            } label: {
+                Label("删除", systemImage: "trash")
+            }
         }
         .contextMenu {
             Button {
