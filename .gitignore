@@ -1,2 +1,7 @@
 .DS_Store
 *.log
+
+# Xcode 生成物(project.yml 是工程定义源)
+Bilink/Bilink.xcodeproj/
+DerivedData/
+build/

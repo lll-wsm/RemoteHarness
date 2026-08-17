@@ -36,14 +36,10 @@
 ## 3. 下一步(M2 起)
 
 ### M2:Bilink(比邻)独立 iPad App(下一个里程碑)
-1. 新建 SwiftUI App 工程(目录 `Bilink/`),实现 ACP 客户端(`URLSessionWebSocketTask`),含:
-   - **鉴权门**:连接设置页(URL + token)→ initialize 握手 → 成功才进入聊天,失败留在连接页显示具体错误(401=token 错 / 超时=地址不可达);
-   - **流式渲染**:把 `session/update` 事件(user_message_chunk / agent_thought_chunk / agent_message_chunk)映射到 ChatStore / MessageBubble;
-   - **会话管理**:记住 chatID,断线重连后 `session/load` 恢复;重连重新鉴权;
-   - **证书校验**:正常校验证书,不提供"跳过证书校验"开关;
-   - token 存 Keychain;
-2. 局域网先跑通,再测公网(隧道);
-3. 渲染工具活动(`_x.ai/queue/changed`、`_x.ai/mcp/*`、tool_call 事件)。
+- [x] **M2.1 骨架 + 鉴权门(2026-08-17)**:Xcode 工程(xcodegen/project.yml,Universal,iOS 17+)、ConnectView(URL+token+agent)、ConnectionStore 状态机(idle/connecting/connected/failed)、ACPClient(URLSessionWebSocketTask + Bearer 鉴权 + initialize 握手 + healthz 前置探测分类错误);实测:正确 token 握手成功、错 token=401、端口关闭=不可达、不可路由=超时;模拟器安装启动无崩溃;
+- [ ] M2.2 聊天:消息气泡、流式渲染、发送/停止;
+- [ ] M2.3 会话:chatID 持久、断线重连、session/load 恢复;
+- [ ] M2.4 打磨:思考折叠、状态条、错误态、Keychain、iPad/iPhone 布局。
 
 ### M3:会话与工具增强
 - chatID 持久会话 UI(会话列表/恢复);
