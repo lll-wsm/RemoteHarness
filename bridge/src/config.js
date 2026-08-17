@@ -12,14 +12,16 @@ const bindHost = process.env.BRIDGE_BIND ?? "127.0.0.1";
 const grokServeUrl = process.env.GROK_SERVE_URL ?? "ws://127.0.0.1:2419";
 const grokServeSecret = process.env.GROK_SERVE_SECRET ?? "";
 const bridgeDir = path.dirname(fileURLToPath(import.meta.url)) + "/..";
-// 加密密钥:显式值 > auto(读/由 start-all 生成的 .encrypt-key,防字面 "auto" 当密钥)
+// 加密密钥:显式值 > 默认读 .encrypt-key(缺失自动生成由 start-all 负责;直接 node 跑时缺失=明文,
+// 便于测试)。BRIDGE_ENCRYPT_KEY=off 可显式强制明文。
 let encryptKey = process.env.BRIDGE_ENCRYPT_KEY ?? "";
-if (encryptKey === "auto") {
+if (encryptKey === "off") {
+  encryptKey = "";
+} else if (encryptKey === "" || encryptKey === "auto") {
   try {
     encryptKey = fs.readFileSync(path.join(bridgeDir, ".encrypt-key"), "utf8").trim();
   } catch {
     encryptKey = "";
-    console.warn("[config] BRIDGE_ENCRYPT_KEY=auto 但未找到 .encrypt-key,请用 scripts/start-all.sh 生成");
   }
 }
 const registryFile = process.env.BRIDGE_REGISTRY_FILE ?? "sessions.json";

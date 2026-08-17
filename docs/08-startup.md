@@ -47,7 +47,7 @@ cd RemoteHarness/bridge
 | `PROBE` | 0 | `PROBE=1` 时先用 `grok -p` 探测模型可用性(余额不足提前报错) |
 | `TUNNEL` | 1 | `TUNNEL=0` 跳过 cloudflared,仅局域网 |
 | `BRIDGE_PORT` / `GROK_SERVE_PORT` | 8777 / 2419 | 端口 |
-| `BRIDGE_ENCRYPT_KEY` | 空 | **`.encrypt-key` 文件驱动**:文件存在即开启「加密必需」模式并每次启动打印密钥;`auto` = 无文件时自动生成并持久化;显式值 = 直接使用;三者都无 = 明文并提示启用方式。密钥经 HKDF→AES-256-GCM 端到端加密会话内容(见 docs/03 §5),App 档案需配置同一密钥 |
+| `BRIDGE_ENCRYPT_KEY` | 默认加密 | **默认只启用加密模式**(HKDF→AES-256-GCM 端到端,隧道内不可读):优先级 显式指定 > `.encrypt-key` 文件 > 自动生成并持久化;每次启动打印密钥供填入 App 档案。`BRIDGE_ENCRYPT_KEY=off` 可显式切明文(仅测试用),详见 docs/03 §5 |
 
 就绪后打印:模型、桥地址、**公网 wss 地址**、BRIDGE_TOKEN、healthz 与 e2e 测试命令、各进程日志路径。
 

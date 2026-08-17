@@ -28,11 +28,11 @@ command -v node >/dev/null 2>&1 || { echo "[start-all] 未找到 node" >&2; exit
 GROK_SERVE_SECRET="${GROK_SERVE_SECRET:-$(openssl rand -base64 32 | tr -d '\n')}"
 BRIDGE_TOKEN="${BRIDGE_TOKEN:-$(npm run -s gen-token)}"
 
-# 加密密钥(可选):优先级 显式指定 > .encrypt-key 文件(auto 或文件存在即启用) > 明文
+# 加密密钥:默认开启(仅加密模式)。优先级 显式指定 > .encrypt-key 文件 > 自动生成
 KEY_FILE="$(cd "$(dirname "$0")/.." && pwd)/.encrypt-key"
 if [ -n "$BRIDGE_ENCRYPT_KEY" ] && [ "$BRIDGE_ENCRYPT_KEY" != "auto" ]; then
   : # 显式指定,下方统一打印
-elif [ "$BRIDGE_ENCRYPT_KEY" = "auto" ] || [ -f "$KEY_FILE" ]; then
+else
   if [ -f "$KEY_FILE" ]; then
     BRIDGE_ENCRYPT_KEY="$(cat "$KEY_FILE")"
   else
@@ -42,13 +42,9 @@ elif [ "$BRIDGE_ENCRYPT_KEY" = "auto" ] || [ -f "$KEY_FILE" ]; then
     chmod 600 "$KEY_FILE"
     echo "[start-all] 已生成新加密密钥并保存 $KEY_FILE(0600)" >&2
   fi
-else
-  echo "[start-all] 加密未开启(纯明文):设 BRIDGE_ENCRYPT_KEY=auto 启动即可自动生成并启用" >&2
 fi
-if [ -n "$BRIDGE_ENCRYPT_KEY" ]; then
-  # 每次启动都打印(与 BRIDGE_TOKEN 一致),供填入 App 档案「加密密钥」
-  echo "[start-all] 🔑 加密密钥(填到 App 档案「加密密钥」): $BRIDGE_ENCRYPT_KEY"
-fi
+# 每次启动都打印(与 BRIDGE_TOKEN 一致),供填入 App 档案「加密密钥」
+echo "[start-all] 🔑 加密密钥(填到 App 档案「加密密钥」): $BRIDGE_ENCRYPT_KEY"
 
 PIDS=()
 SERVE_LOG="$(mktemp -t rh-serve.XXXXXX)"
