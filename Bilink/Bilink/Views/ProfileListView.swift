@@ -1,12 +1,24 @@
 import SwiftUI
 
+/// 编辑弹窗目标:新增 or 编辑指定机器。用 Identifiable 驱动 .sheet(item:),确保每次呈现都拿到最新 profile。
+private enum ProfileEditorTarget: Identifiable {
+    case add
+    case edit(ConnectionProfile)
+
+    var id: String {
+        switch self {
+        case .add: return "add"
+        case .edit(let profile): return profile.id.uuidString
+        }
+    }
+}
+
 /// 机器列表主页:多连接 profile 的增删改与连接入口;连接失败留在本页提示。
 struct ProfileListView: View {
     @Bindable var store: ConnectionStore
     let profileStore: ProfileStore
     let sessionStore: SessionStore
-    @State private var showEditor = false
-    @State private var editingProfile: ConnectionProfile?
+    @State private var editorTarget: ProfileEditorTarget?
     @State private var deletingProfile: ConnectionProfile?
     @State private var errorMessage: String?
 
@@ -48,15 +60,19 @@ struct ProfileListView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        editingProfile = nil
-                        showEditor = true
+                        editorTarget = .add
                     } label: {
                         Label("添加机器", systemImage: "plus")
                     }
                 }
             }
-            .sheet(isPresented: $showEditor) {
-                ProfileEditView(profileStore: profileStore, profile: editingProfile)
+            .sheet(item: $editorTarget) { target in
+                switch target {
+                case .add:
+                    ProfileEditView(profileStore: profileStore, profile: nil)
+                case .edit(let profile):
+                    ProfileEditView(profileStore: profileStore, profile: profile)
+                }
             }
             .overlay(alignment: .top) {
                 if let message = errorMessage {
@@ -72,65 +88,48 @@ struct ProfileListView: View {
     }
 
     private func row(_ profile: ConnectionProfile) -> some View {
-        HStack(spacing: 10) {
-            // 点击行主体 → 连接
-            Button {
-                connect(profile)
-            } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
-                        Text(profile.name)
-                            .font(.headline)
-                            .lineLimit(1)
-                        if store.state == .connecting, store.config?.profileID == profile.id {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                    }
-                    Text(profile.url)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+        Button {
+            connect(profile)
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(profile.name)
+                        .font(.headline)
                         .lineLimit(1)
-                    Text("\(sessionStore.sessions(for: profile.id).count) 个会话"
-                         + (profile.lastUsedAt.map { " · 最后使用 \($0.formatted(date: .abbreviated, time: .shortened))" } ?? ""))
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                    if store.state == .connecting, store.config?.profileID == profile.id {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
                 }
-                .padding(.vertical, 2)
-            }
-            .buttonStyle(.plain)
-            // 常驻可见的编辑按钮:任何输入方式都可直接进入编辑
-            Button {
-                editingProfile = profile
-                showEditor = true
-            } label: {
-                Image(systemName: "pencil")
-                    .font(.body)
+                Text(profile.url)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text("\(sessionStore.sessions(for: profile.id).count) 个会话"
+                     + (profile.lastUsedAt.map { " · 最后使用 \($0.formatted(date: .abbreviated, time: .shortened))" } ?? ""))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("编辑 \(profile.name)")
+            .padding(.vertical, 2)
         }
-        .swipeActions(edge: .leading) {
-            Button {
-                editingProfile = profile
-                showEditor = true
-            } label: {
-                Label("编辑", systemImage: "pencil")
-            }
-            .tint(.orange)
-        }
+        .buttonStyle(.plain)
+        // 左滑:编辑 + 删除(与用户预期一致);长按菜单同样提供
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
                 deletingProfile = profile
             } label: {
                 Label("删除", systemImage: "trash")
             }
+            Button {
+                editorTarget = .edit(profile)
+            } label: {
+                Label("编辑", systemImage: "pencil")
+            }
+            .tint(.orange)
         }
         .contextMenu {
             Button {
-                editingProfile = profile
-                showEditor = true
+                editorTarget = .edit(profile)
             } label: {
                 Label("编辑", systemImage: "pencil")
             }

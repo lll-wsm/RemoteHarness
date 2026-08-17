@@ -5,10 +5,18 @@ struct ProfileEditView: View {
     let profileStore: ProfileStore
     let profile: ConnectionProfile?
     @Environment(\.dismiss) private var dismiss
-    @State private var name = ""
-    @State private var url = ""
+    @State private var name: String
+    @State private var url: String
     @State private var token = ""
     @State private var encryptKey = ""
+
+    /// init 直接预填(不依赖 onAppear,避免 sheet 呈现时序导致编辑时字段为空)。
+    init(profileStore: ProfileStore, profile: ConnectionProfile?) {
+        self.profileStore = profileStore
+        self.profile = profile
+        _name = State(initialValue: profile?.name ?? "")
+        _url = State(initialValue: profile?.url ?? "")
+    }
 
     private var isNew: Bool { profile == nil }
 
@@ -40,12 +48,6 @@ struct ProfileEditView: View {
                     Button("保存") { save() }
                         .disabled(!canSave)
                 }
-            }
-        }
-        .onAppear {
-            if let profile {
-                name = profile.name
-                url = profile.url
             }
         }
     }
