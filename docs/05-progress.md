@@ -50,7 +50,8 @@
 - [x] **MessageBubble 重构**:助手消息 `ChatMarkdownRenderer`(`.assistant`/`.compact`/`.default`,`isComplete: !isStreaming` 流式降级);用户消息保持纯文本(accent 背景上块级元素视觉冲突);**▌光标移出文本**改为渲染器下方独立光标(避免破坏 Markdown 解析);长按气泡「复制全文」菜单(代码块复制按钮待包 PR);
 - [x] **headless 解析断言**(链接构建产物模块直接测试):标题/引用/代码/表格/列表块全部识别;流式不完整代码围栏(isComplete=false)安全降级为 code 块;流式纯文本正常 prose;空文本 0 块;
 - [x] **模拟器冒烟**:App 安装启动无崩溃、进程存活;渲染 harness(复刻气泡结构)截图像素分析:检出蓝(user 气泡)+ 淡灰/内容区,配色预期;
-- [ ] **后续**:M2 智能滚动、M3 失败重试+时间戳/思考块修正、M4 锁 revision+收尾(见 docs/11 阶段 2-5);代码块复制按钮走 SwiftUIChatMarkdown 包 PR。
+- [x] **M2 聊天性能优化(2026-08-17,实施见 docs/12)**:① 流式降级:助手消息流式期间纯文本+光标渲染(零 AST 解析开销),完成后切换 ChatMarkdownRenderer 一次性渲染;② 智能滚动:iOS 18 `onScrollGeometryChange` 距底≤120pt 判定钉底,高频 chunk 无动画滚动防抖,上滑回看停住并展示「回到最新」胶囊按钮(红点角标,回底自动消除);
+- [ ] **后续**:M3 失败重试+时间戳/思考块修正、M4 锁 revision+收尾(见 docs/11 阶段 3-5);代码块复制按钮走 SwiftUIChatMarkdown 包 PR。
 
 ### M3.1 多连接多会话(2026-08-17,已实现)
 - [x] **桥扩展**:`sessions/list`(只读注册表,过滤不可恢复孤儿)+ `sessions/remove`(尽力关闭 grok 会话,失败不阻塞)+ `handleSessionNew` 失败回滚(不再产生 grokSessionId=null 孤儿);
