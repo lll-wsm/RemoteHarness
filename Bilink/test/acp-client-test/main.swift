@@ -74,6 +74,18 @@ Task {
         exit(0)
     }
 
+    // connect 模式:纯握手验证,不触碰 profile/会话存储
+    if mode == "connect" {
+        let client = ACPClient()
+        do {
+            try await client.start(url: url, token: token, timeout: 5)
+        } catch {
+            fail(error)
+        }
+        print("✅ 握手成功 isReady=\(client.isReady) connected=\(client.connectionInfo ?? "")")
+        exit(0)
+    }
+
     if recoverFlag {
         print("模拟重装:清空本地会话索引(--recover)")
         wipeLocalIndex() // 必须在读入内存目录之前:重装=新进程,内存应为空

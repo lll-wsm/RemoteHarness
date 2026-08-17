@@ -52,6 +52,11 @@ final class ConnectionStore {
                 Task { await self.reconnect(config) }
             }
             try await client.start(url: config.url, token: config.token, timeout: 8)
+            // 连接建立期间用户可能已手动断开/删除 profile:丢弃该连接,不进已连接态
+            guard !userDisconnect else {
+                client.close()
+                return
+            }
             self.client = client
             state = .connected
             if isReconnect {

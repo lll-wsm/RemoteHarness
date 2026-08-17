@@ -65,7 +65,10 @@ export class AcpServer {
         this.sessionConns.delete(chatID);
         this.connSessions.delete(ws);
         for (const [sid, conn] of this.grokSessionConns) {
-          if (conn === ws) this.grokSessionConns.delete(sid);
+          if (conn === ws) {
+            this.grokSessionConns.delete(sid);
+            this.grokSessionChatIDs.delete(sid);
+          }
         }
       }
     });

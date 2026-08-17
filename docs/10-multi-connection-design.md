@@ -227,6 +227,7 @@ case "sessions/remove": {
 | token 失效 | 现有 401 分类提示;ProfileEditView 重新填 token |
 | 两设备同时用同一桥的不同会话 | 桥多连接天然支持,互不干扰(通知按 chatID 路由) |
 | 两设备同时用**同一**会话 | 通知只达最后绑定的连接(Phase D 修复,本期文档标注限制) |
+| 返回机器列表 | 当前只能点「断开」(离开即断开,连接关闭)。若后续要做「返回但保持连接/多会话驻留」(Phase C 并行会话),需改为常驻连接 + 会话切换视图,记录待改造 |
 | 删除 profile | 级联删本地(token/会话);桥注册表条目保留但不再可见,无害;如需清理可在删除前逐会话 sessions/remove(暂不做) |
 | 同一台桥两个 profile(LAN + 隧道) | 同一 chatID 只归属最先使用它的 profile(mergeRemote 跨 profile 去重);本地消息文件按 chatID 共享,两个 profile 打开的是同一份历史 |
 | 切换会话时旧会话有在途 turn | switchTo 前先对旧会话 session/cancel(见 §4.2);若 cancel 失败(断线)仍切换,turn 在远程继续跑完,结果不丢失(回放可见) |
