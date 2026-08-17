@@ -10,27 +10,19 @@ struct ChatView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if let chatStore {
-                    ChatContent(store: store, config: config, chatStore: chatStore)
-                } else {
-                    ProgressView("创建远程会话…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
-            .navigationTitle(config.name)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        showSessions = true
-                    } label: {
-                        Label("会话", systemImage: "clock")
+            VStack(spacing: 0) {
+                headerBar
+                Divider()
+                Group {
+                    if let chatStore {
+                        ChatContent(store: store, config: config, chatStore: chatStore)
+                    } else {
+                        ProgressView("创建远程会话…")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("断开") { store.disconnect() }
-                }
             }
+            .toolbar(.hidden, for: .navigationBar)
         }
         .task {
             if chatStore == nil, let client = store.client {
@@ -65,6 +57,39 @@ struct ChatView: View {
                 .task { await chatStore.syncRemoteSessions() }
             }
         }
+    }
+
+    /// 自定义头部:[返回] [链接名称(居中)] [会话] [断开];返回 = 断开并回首页。
+    private var headerBar: some View {
+        ZStack {
+            HStack(spacing: 12) {
+                Button {
+                    store.disconnect()
+                } label: {
+                    Label("返回", systemImage: "chevron.left")
+                }
+                Spacer()
+                Button {
+                    showSessions = true
+                } label: {
+                    Label("会话", systemImage: "clock")
+                }
+                Button {
+                    store.disconnect()
+                } label: {
+                    Text("断开")
+                }
+            }
+            // 居中的链接名称(不拦截按钮点击)
+            Text(config.name)
+                .font(.headline)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
+                .allowsHitTesting(false)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(.bar)
     }
 }
 
