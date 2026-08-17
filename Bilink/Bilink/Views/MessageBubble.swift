@@ -10,7 +10,7 @@ struct MessageBubble: View {
 
     var body: some View {
         HStack(alignment: .bottom) {
-            if isUser { Spacer(minLength: 64) }
+            if isUser { Spacer(minLength: 12) }
             VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
                 if !isUser, !message.thought.isEmpty {
                     ThoughtBlockView(text: message.thought)
@@ -24,7 +24,7 @@ struct MessageBubble: View {
                         }
                     }
             }
-            if !isUser { Spacer(minLength: 64) }
+            if !isUser { Spacer(minLength: 12) }
         }
     }
 

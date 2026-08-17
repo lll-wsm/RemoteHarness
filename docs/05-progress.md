@@ -33,6 +33,7 @@
 - [ ] **限流/白名单经真实 cloudflared 的端到端**:本地模拟已验证,真实隧道下按 CF-Connecting-IP 生效需在公网实测;
 - [ ] 邮箱 OTP 入口验证(Cloudflare Access):被「无域名/无外卡」卡住;备选 Tailscale / auth-proxy;
 - [ ] 第三方 API 计费影响:DeepSeek 直连 / opencode 网关余额不足时返回 402,客户端会显示"API 额度不足"错误横幅;GLM Ark(glm-5-2)当前可用。**注意:`grok agent serve` 的模型由 `~/.grok/config.toml` 的 `[models].default` 决定,`-m` 参数不生效**(原配置已备份 config.toml.bak,default 现为 glm-5-2)。
+- [ ] **会话模型钉死坑(2026-08-17 实战排障)**:旧会话在 config 默认模型切换前创建,`session/load` 会把 serve 进程的当前模型切回旧会话存储的模型(如 deepseek-v4-flash 直连);若该账户无余额 → 全部请求 402 "Quota exhausted"(App 误显示为"握手失败"),且会毒化后续新建会话,直到重启 serve。**化解**:① 从 config.toml 移除/改名已废弃的 `[model.xxx]` 段(备份 config.toml.deepseek.bak),旧会话 load 会回退到 `[models].default`;② 桥实例在多轮 serve 重启后曾出现通知不再转发(新会话请求正常但收不到任何 session/update),重启桥即恢复——serve/桥/隧道重启后**务必用 e2e 或 CLI harness 复测完整聊天链路**(CLI:见 CLAUDE.md)。
 
 ## 3. 下一步(M2 起)
 

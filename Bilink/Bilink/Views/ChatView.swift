@@ -111,7 +111,6 @@ private struct ChatContent: View {
                                 detail: chatStore.queueStatus ?? config.url)
             Divider()
             MessageList(chatStore: chatStore)
-                .frame(maxWidth: 720)
                 .frame(maxWidth: .infinity)
             InputBar(
                 text: $input,
@@ -126,7 +125,6 @@ private struct ChatContent: View {
                 },
                 onStop: { Task { await chatStore.stop() } }
             )
-            .frame(maxWidth: 720)
             .frame(maxWidth: .infinity)
         }
         .overlay(alignment: .top) {
