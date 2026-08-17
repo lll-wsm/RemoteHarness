@@ -14,6 +14,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+GROK_MODEL="${GROK_MODEL:-$(sed -n 's/^default = "\(.*\)"/\1/p' ~/.grok/config.toml 2>/dev/null | head -1)}"
 GROK_MODEL="${GROK_MODEL:-glm-5-2}"
 BRIDGE_PORT="${BRIDGE_PORT:-8777}"
 GROK_SERVE_PORT="${GROK_SERVE_PORT:-2419}"

@@ -43,7 +43,7 @@ cd RemoteHarness/bridge
 |---|---|---|
 | `GROK_SERVE_SECRET` | 自动生成 | serve 与桥共用;脚本启动时打印长度,复用请显式传入 |
 | `BRIDGE_TOKEN` | 自动生成 | **启动时打印,填到 iPad 连接页**;复用请显式传入 |
-| `GROK_MODEL` | glm-5-2 | **注意:serve 实际模型由 `~/.grok/config.toml` 的 `[models].default` 决定,`-m` 参数不生效**;换模型改配置文件后重启 serve |
+| `GROK_MODEL` | 读取 `~/.grok/config.toml` 的 `[models].default` | **serve 实际模型由 `[models].default` 决定,`-m` 参数不生效**;换模型改配置文件后重启 serve(脚本打印的"模型"会随之显示) |
 | `PROBE` | 0 | `PROBE=1` 时先用 `grok -p` 探测模型可用性(余额不足提前报错) |
 | `TUNNEL` | 1 | `TUNNEL=0` 跳过 cloudflared,仅局域网 |
 | `BRIDGE_PORT` / `GROK_SERVE_PORT` | 8777 / 2419 | 端口 |
