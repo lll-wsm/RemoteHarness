@@ -8,3 +8,6 @@ build/
 
 # 用户临时笔记(勿提交)
 bridge/新建Markdown文档.md
+
+# 桥加密密钥(auto 模式生成,勿提交)
+bridge/.encrypt-key

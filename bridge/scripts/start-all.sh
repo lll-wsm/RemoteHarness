@@ -28,6 +28,22 @@ command -v node >/dev/null 2>&1 || { echo "[start-all] 未找到 node" >&2; exit
 GROK_SERVE_SECRET="${GROK_SERVE_SECRET:-$(openssl rand -base64 32 | tr -d '\n')}"
 BRIDGE_TOKEN="${BRIDGE_TOKEN:-$(npm run -s gen-token)}"
 
+# 加密密钥(可选):显式指定 → 用之;auto → 首次生成并持久化 .encrypt-key(0600,重启复用)
+if [ "$BRIDGE_ENCRYPT_KEY" = "auto" ]; then
+  KEY_FILE="$(cd "$(dirname "$0")/.." && pwd)/.encrypt-key"
+  if [ -f "$KEY_FILE" ]; then
+    BRIDGE_ENCRYPT_KEY="$(cat "$KEY_FILE")"
+  else
+    BRIDGE_ENCRYPT_KEY="$(openssl rand -base64 24 | tr -d '\n')"
+    umask 077
+    printf '%s' "$BRIDGE_ENCRYPT_KEY" >"$KEY_FILE"
+    chmod 600 "$KEY_FILE"
+    echo "[start-all] 🔑 已生成加密密钥(仅首次打印,请填入 App 档案「加密密钥」):"
+    echo "   $BRIDGE_ENCRYPT_KEY"
+    echo "[start-all]   已保存 $KEY_FILE(0600),重启复用;查看: cat $KEY_FILE"
+  fi
+fi
+
 PIDS=()
 SERVE_LOG="$(mktemp -t rh-serve.XXXXXX)"
 BRIDGE_LOG="$(mktemp -t rh-bridge.XXXXXX)"
