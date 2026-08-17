@@ -1,30 +1,24 @@
 import SwiftUI
 
-/// 聊天页主界面。M2.1 为占位:展示连接状态与断开入口;
-/// M2.2 填充消息气泡与流式渲染。
+/// 聊天页:M2.2 完整实现——消息列表(流式)+ 输入栏 + 状态条。
 struct ChatView: View {
     @Bindable var store: ConnectionStore
     let config: ConnectionConfig
+    @State private var chatStore: ChatStore?
 
     var body: some View {
-        VStack(spacing: 0) {
-            ConnectionStatusBar(isConnected: store.state == .connected, detail: config.url)
-            Divider()
-            Spacer()
-            ContentUnavailableView(
-                "已连接",
-                systemImage: "checkmark.circle",
-                description: Text("聊天功能开发中(M2.2)\n远程 agent: \(config.agent)")
-            )
-            Spacer()
-            HStack {
-                TextField("输入消息…", text: .constant(""))
-                    .textFieldStyle(.roundedBorder)
-                    .disabled(true)
-                Button("发送") {}
-                    .disabled(true)
+        Group {
+            if let chatStore {
+                ChatContent(store: store, config: config, chatStore: chatStore)
+            } else {
+                ProgressView("创建远程会话…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .padding()
+        }
+        .task {
+            if chatStore == nil, let client = store.client {
+                chatStore = ChatStore(client: client)
+            }
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -34,28 +28,83 @@ struct ChatView: View {
     }
 }
 
-/// 顶部连接状态条:绿点=已连接;红点=断开/失败。
-struct ConnectionStatusBar: View {
-    let isConnected: Bool
-    let detail: String
+private struct ChatContent: View {
+    @Bindable var store: ConnectionStore
+    let config: ConnectionConfig
+    let chatStore: ChatStore
+    @State private var input = ""
 
     var body: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(isConnected ? Color.green : Color.red)
-                .frame(width: 8, height: 8)
-            Text(isConnected ? "已连接" : "未连接")
-                .font(.footnote)
-                .fontWeight(.medium)
-            Text(detail)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer()
+        VStack(spacing: 0) {
+            ConnectionStatusBar(isConnected: store.state == .connected,
+                                detail: chatStore.queueStatus ?? config.url)
+            Divider()
+            MessageList(chatStore: chatStore)
+            InputBar(
+                text: $input,
+                canSend: chatStore.isSessionReady &&
+                    !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                isResponding: chatStore.isResponding,
+                onSend: {
+                    let text = input
+                    input = ""
+                    Task { await chatStore.send(text) }
+                },
+                onStop: { Task { await chatStore.stop() } }
+            )
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(.bar)
+        .overlay(alignment: .top) {
+            if let error = chatStore.errorMessage {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .padding(8)
+                    .background(.bar, in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.top, 40)
+                    .transition(.opacity)
+            }
+        }
+    }
+}
+
+/// 消息列表:自动滚动到最新;流式期间保持钉在底部。
+private struct MessageList: View {
+    let chatStore: ChatStore
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    if chatStore.messages.isEmpty {
+                        ContentUnavailableView(
+                            "已连接 \(chatStore.chatID.map { "· \($0.prefix(8))" } ?? "")",
+                            systemImage: "bubble.left.and.bubble.right",
+                            description: Text("输入消息开始远程对话")
+                        )
+                        .padding(.top, 80)
+                    }
+                    ForEach(chatStore.messages) { message in
+                        MessageBubble(message: message)
+                            .id(message.id)
+                    }
+                }
+                .padding()
+            }
+            .onChange(of: chatStore.messages.count) { _, _ in
+                scrollToLast(proxy)
+            }
+            .onChange(of: chatStore.messages.last?.text) { _, _ in
+                if chatStore.messages.last?.isStreaming == true {
+                    scrollToLast(proxy)
+                }
+            }
+        }
+    }
+
+    private func scrollToLast(_ proxy: ScrollViewProxy) {
+        guard let last = chatStore.messages.last else { return }
+        withAnimation(.easeOut(duration: 0.15)) {
+            proxy.scrollTo(last.id, anchor: .bottom)
+        }
     }
 }
