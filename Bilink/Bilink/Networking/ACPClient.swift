@@ -12,6 +12,8 @@ final class ACPClient {
     private(set) var connectionInfo: String?
 
     var onNotification: ((RPCNotification) -> Void)?
+    /// 连接意外断开时回调(主动 close 不触发)。
+    var onDisconnect: (() -> Void)?
 
     private var task: URLSessionWebSocketTask?
     private var nextId = 1
@@ -153,6 +155,7 @@ final class ACPClient {
     // MARK: - 接收循环
 
     private func startReceiveLoop() {
+        receiveTask?.cancel()
         receiveTask = Task { [weak self] in
             guard let self, let task = self.task else { return }
             while !Task.isCancelled {
@@ -195,6 +198,7 @@ final class ACPClient {
     private func handleDisconnect() {
         isReady = false
         failAllPending(with: .transport("连接已断开"))
+        onDisconnect?()
     }
 
     private func failAllPending(with error: ACPError) {

@@ -38,8 +38,8 @@
 ### M2:Bilink(比邻)独立 iPad App(下一个里程碑)
 - [x] **M2.1 骨架 + 鉴权门(2026-08-17)**:Xcode 工程(xcodegen/project.yml,Universal,iOS 17+)、ConnectView(URL+token+agent)、ConnectionStore 状态机(idle/connecting/connected/failed)、ACPClient(URLSessionWebSocketTask + Bearer 鉴权 + initialize 握手 + healthz 前置探测分类错误);实测:正确 token 握手成功、错 token=401、端口关闭=不可达、不可路由=超时;模拟器安装启动无崩溃;
 - [x] **M2.2 聊天(2026-08-17)**:ChatStore(session/new → chatID、session/prompt 发送、session/cancel 停止、流式事件组装:user_message_chunk 忽略回显 / agent_thought_chunk→思考 / agent_message_chunk→文本 / turn_completed→收尾、_x.ai/queue/changed→排队状态);UI:消息气泡(用户右/助手左)、流式光标、思考折叠块、多行输入栏(发送/停止)、自动滚动;**实测(CLI 驱动真 ChatStore + 真 grok)**:建会话 → 发消息 → 助手回复"OK"+ 思考块,链路通过;
-- [ ] M2.3 会话:chatID 持久、断线重连、session/load 恢复;
-- [ ] M2.4 打磨:思考折叠、状态条、错误态、Keychain、iPad/iPhone 布局。
+- [x] **M2.3 会话持久与断线重连(2026-08-17)**:chatID 按连接 URL 持久化 UserDefaults,重进/重连后 `session/load {chatID}` 恢复(实测:两次运行加载同一 chatID,对话延续);断线自动重连(指数退避 1s→30s,重连后重新握手 + 会话恢复),状态条显示"重连中"(橙点);连接页记忆上次 URL/名称;**实测**:CLI 两次运行同 chatID 恢复通过;重连运行时行为待实体机验证(断隧道→重连中→恢复);
+- [ ] M2.4 打磨:错误态走查、Keychain 存 token、iPad 宽屏布局优化;
 
 ### M3:会话与工具增强
 - chatID 持久会话 UI(会话列表/恢复);

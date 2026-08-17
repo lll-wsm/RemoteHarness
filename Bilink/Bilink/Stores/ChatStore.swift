@@ -1,8 +1,9 @@
 import Foundation
 import Observation
 
-/// 聊天状态:会话创建(session/new)、发送(session/prompt)、
+/// 聊天状态:会话创建/恢复(session/new 或 session/load)、发送(session/prompt)、
 /// 流式事件组装(session/update → 消息追加)、停止(session/cancel)。
+/// chatID 持久化到 UserDefaults(按连接 URL 分键),重进/重连后 session/load 恢复。
 @Observable
 final class ChatStore {
     private(set) var messages: [ChatMessage] = []
@@ -13,26 +14,56 @@ final class ChatStore {
     private(set) var errorMessage: String?
 
     private let client: ACPClient
-    private var didStartSession = false
+    private let connectionURL: String
+    private var isPreparing = false
 
-    init(client: ACPClient) {
+    init(client: ACPClient, connectionURL: String) {
         self.client = client
+        self.connectionURL = connectionURL
         client.onNotification = { [weak self] notification in
             self?.handle(notification)
         }
-        Task { await self.createSessionIfNeeded() }
+        Task { await self.prepareSession() }
+    }
+
+    private var chatIDKey: String {
+        "bilink.chatID.\(connectionURL)"
+    }
+
+    private var storedChatID: String? {
+        get { UserDefaults.standard.string(forKey: chatIDKey) }
+        set { UserDefaults.standard.set(newValue, forKey: chatIDKey) }
     }
 
     // MARK: - 会话
 
-    /// 首次进入时创建远程 grok 会话;chatID 由桥返回(M2.3 做持久化恢复)。
-    func createSessionIfNeeded() async {
-        guard !didStartSession else { return }
-        didStartSession = true
+    /// 建立或恢复远程会话:有已存 chatID → session/load 恢复;否则 session/new 新建并持久化。
+    /// 重连后由 ConnectionStore.onReconnected 再次调用。
+    func prepareSession() async {
+        guard !isPreparing else { return }
+        isPreparing = true
+        defer { isPreparing = false }
+
+        if let stored = storedChatID {
+            chatID = stored
+            do {
+                _ = try await client.send("session/load", params: .acp(["chatID": stored]))
+                isSessionReady = true
+                return
+            } catch {
+                // 加载失败(如桥重启丢了注册表),回退新建
+                chatID = nil
+            }
+        }
+        await createSession()
+    }
+
+    private func createSession() async {
         do {
             let result = try await client.send("session/new", params: .acp([:]))
             if let object = result?.objectValue, let id = object["chatID"]?.stringValue {
                 chatID = id
+                storedChatID = id
             }
             isSessionReady = true
         } catch {

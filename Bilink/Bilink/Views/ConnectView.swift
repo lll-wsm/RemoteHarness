@@ -4,9 +4,16 @@ import SwiftUI
 /// 失败(401/超时/无法连接)留在本页并显示具体错误;成功由 RootView 切到聊天页。
 struct ConnectView: View {
     @Bindable var store: ConnectionStore
-    @State private var name = "我的远程机器"
-    @State private var url = ""
+    @State private var name: String
+    @State private var url: String
     @State private var token = ""
+
+    init(store: ConnectionStore) {
+        self.store = store
+        let defaults = UserDefaults.standard
+        _name = State(initialValue: defaults.string(forKey: "bilink.lastName") ?? "我的远程机器")
+        _url = State(initialValue: defaults.string(forKey: "bilink.lastURL") ?? "")
+    }
 
     var body: some View {
         NavigationStack {
@@ -41,6 +48,9 @@ struct ConnectView: View {
 
                 Section {
                     Button {
+                        let defaults = UserDefaults.standard
+                        defaults.set(name, forKey: "bilink.lastName")
+                        defaults.set(url, forKey: "bilink.lastURL")
                         Task { await store.connect(ConnectionConfig(name: name, url: url, token: token)) }
                     } label: {
                         if store.state == .connecting {

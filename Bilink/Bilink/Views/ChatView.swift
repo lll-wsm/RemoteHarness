@@ -17,7 +17,10 @@ struct ChatView: View {
         }
         .task {
             if chatStore == nil, let client = store.client {
-                chatStore = ChatStore(client: client)
+                let chat = ChatStore(client: client, connectionURL: config.url)
+                // 断线重连成功后重新加载会话
+                store.onReconnected = { Task { await chat.prepareSession() } }
+                chatStore = chat
             }
         }
         .toolbar {
@@ -36,7 +39,7 @@ private struct ChatContent: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ConnectionStatusBar(isConnected: store.state == .connected,
+            ConnectionStatusBar(state: store.state,
                                 detail: chatStore.queueStatus ?? config.url)
             Divider()
             MessageList(chatStore: chatStore)

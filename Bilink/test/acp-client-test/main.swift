@@ -26,8 +26,8 @@ Task {
     }
 
     if mode == "chat" {
-        let chat = ChatStore(client: client)
-        // 等会话就绪(session/new 返回 chatID)
+        let chat = ChatStore(client: client, connectionURL: "cli-test://local")
+        // 等会话就绪(session/new 或 session/load 完成)
         for _ in 0..<50 where !chat.isSessionReady {
             try await Task.sleep(nanoseconds: 200_000_000)
         }

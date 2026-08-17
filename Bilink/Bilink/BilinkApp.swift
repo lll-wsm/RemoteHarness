@@ -15,7 +15,7 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if store.state == .connected, let config = store.config {
+            if store.isActive, let config = store.config {
                 ChatView(store: store, config: config)
             } else {
                 ConnectView(store: store)
