@@ -12,7 +12,9 @@ struct ConnectView: View {
         self.store = store
         let defaults = UserDefaults.standard
         _name = State(initialValue: defaults.string(forKey: "bilink.lastName") ?? "我的远程机器")
-        _url = State(initialValue: defaults.string(forKey: "bilink.lastURL") ?? "")
+        let savedURL = defaults.string(forKey: "bilink.lastURL") ?? ""
+        _url = State(initialValue: savedURL)
+        _token = State(initialValue: KeychainService.read("bilink.token.\(savedURL)") ?? "")
     }
 
     var body: some View {
@@ -51,6 +53,7 @@ struct ConnectView: View {
                         let defaults = UserDefaults.standard
                         defaults.set(name, forKey: "bilink.lastName")
                         defaults.set(url, forKey: "bilink.lastURL")
+                        KeychainService.save(token, forKey: "bilink.token.\(url)")
                         Task { await store.connect(ConnectionConfig(name: name, url: url, token: token)) }
                     } label: {
                         if store.state == .connecting {
@@ -69,6 +72,10 @@ struct ConnectView: View {
                 }
             }
             .navigationTitle("Bilink 连接")
+        }
+        .onChange(of: url) { _, newURL in
+            // 切换地址时自动带出该地址已保存的 token
+            token = KeychainService.read("bilink.token.\(newURL)") ?? ""
         }
     }
 }

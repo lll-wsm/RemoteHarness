@@ -43,6 +43,8 @@ private struct ChatContent: View {
                                 detail: chatStore.queueStatus ?? config.url)
             Divider()
             MessageList(chatStore: chatStore)
+                .frame(maxWidth: 720)
+                .frame(maxWidth: .infinity)
             InputBar(
                 text: $input,
                 canSend: chatStore.isSessionReady &&
@@ -55,16 +57,28 @@ private struct ChatContent: View {
                 },
                 onStop: { Task { await chatStore.stop() } }
             )
+            .frame(maxWidth: 720)
+            .frame(maxWidth: .infinity)
         }
         .overlay(alignment: .top) {
             if let error = chatStore.errorMessage {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .padding(8)
-                    .background(.bar, in: RoundedRectangle(cornerRadius: 8))
-                    .padding(.top, 40)
-                    .transition(.opacity)
+                HStack(spacing: 8) {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                    Spacer()
+                    Button {
+                        chatStore.errorMessage = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .font(.footnote)
+                .foregroundStyle(.red)
+                .padding(8)
+                .background(.bar, in: RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 16)
+                .padding(.top, 40)
+                .transition(.opacity)
             }
         }
     }

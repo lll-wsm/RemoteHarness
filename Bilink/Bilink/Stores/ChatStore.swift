@@ -11,7 +11,7 @@ final class ChatStore {
     private(set) var queueStatus: String?
     private(set) var chatID: String?
     private(set) var isSessionReady = false
-    private(set) var errorMessage: String?
+    var errorMessage: String?
 
     private let client: ACPClient
     private let connectionURL: String
@@ -43,6 +43,7 @@ final class ChatStore {
         guard !isPreparing else { return }
         isPreparing = true
         defer { isPreparing = false }
+        errorMessage = nil
 
         if let stored = storedChatID {
             chatID = stored
@@ -76,6 +77,7 @@ final class ChatStore {
     func send(_ text: String) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        errorMessage = nil
         messages.append(ChatMessage(role: .user, text: trimmed))
         isResponding = true
         queueStatus = "发送中…"
