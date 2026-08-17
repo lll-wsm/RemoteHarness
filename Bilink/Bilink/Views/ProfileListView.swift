@@ -88,31 +88,44 @@ struct ProfileListView: View {
     }
 
     private func row(_ profile: ConnectionProfile) -> some View {
-        Button {
-            connect(profile)
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text(profile.name)
-                        .font(.headline)
-                        .lineLimit(1)
-                    if store.state == .connecting, store.config?.profileID == profile.id {
-                        ProgressView()
-                            .controlSize(.small)
+        HStack(spacing: 10) {
+            Button {
+                connect(profile)
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text(profile.name)
+                            .font(.headline)
+                            .lineLimit(1)
+                        if store.state == .connecting, store.config?.profileID == profile.id {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
                     }
+                    Text(profile.url)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Text("\(sessionStore.sessions(for: profile.id).count) 个会话"
+                         + (profile.lastUsedAt.map { " · 最后使用 \($0.formatted(date: .abbreviated, time: .shortened))" } ?? ""))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                 }
-                Text(profile.url)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Text("\(sessionStore.sessions(for: profile.id).count) 个会话"
-                     + (profile.lastUsedAt.map { " · 最后使用 \($0.formatted(date: .abbreviated, time: .shortened))" } ?? ""))
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                .padding(.vertical, 2)
             }
-            .padding(.vertical, 2)
+            .buttonStyle(.plain)
+            Spacer()
+            // 行尾「链接」图标按钮:一键连接该机器
+            Button {
+                connect(profile)
+            } label: {
+                Image(systemName: "link")
+                    .font(.body)
+                    .foregroundStyle(.tint)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("连接 \(profile.name)")
         }
-        .buttonStyle(.plain)
         // 左滑:编辑 + 删除(与用户预期一致);长按菜单同样提供
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {

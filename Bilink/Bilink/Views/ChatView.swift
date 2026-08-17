@@ -59,26 +59,32 @@ struct ChatView: View {
         }
     }
 
-    /// 自定义头部:[返回] [链接名称(居中)] [会话] [断开];返回 = 断开并回首页。
+    /// 自定义头部:[←返回] [链接名称(居中)] [🕐会话] [✕断开];返回 = 断开并回首页。图标按钮,仅辅助标签带文字。
     private var headerBar: some View {
         ZStack {
-            HStack(spacing: 12) {
+            HStack(spacing: 20) {
                 Button {
                     store.disconnect()
                 } label: {
-                    Label("返回", systemImage: "chevron.left")
+                    Image(systemName: "chevron.left")
+                        .font(.body.weight(.semibold))
                 }
+                .accessibilityLabel("返回")
                 Spacer()
                 Button {
                     showSessions = true
                 } label: {
-                    Label("会话", systemImage: "clock")
+                    Image(systemName: "clock")
+                        .font(.body)
                 }
+                .accessibilityLabel("历史会话")
                 Button {
                     store.disconnect()
                 } label: {
-                    Text("断开")
+                    Image(systemName: "xmark.circle")
+                        .font(.body)
                 }
+                .accessibilityLabel("断开链接")
             }
             // 居中的链接名称(不拦截按钮点击)
             Text(config.name)
