@@ -111,6 +111,19 @@ struct ProfileListView: View {
             }
             .tint(.orange)
         }
+        .contextMenu {
+            Button {
+                editingProfile = profile
+                showEditor = true
+            } label: {
+                Label("编辑", systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                deletingProfile = profile
+            } label: {
+                Label("删除", systemImage: "trash")
+            }
+        }
     }
 
     private func connect(_ profile: ConnectionProfile) {

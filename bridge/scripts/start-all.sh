@@ -38,10 +38,10 @@ if [ "$BRIDGE_ENCRYPT_KEY" = "auto" ]; then
     umask 077
     printf '%s' "$BRIDGE_ENCRYPT_KEY" >"$KEY_FILE"
     chmod 600 "$KEY_FILE"
-    echo "[start-all] 🔑 已生成加密密钥(仅首次打印,请填入 App 档案「加密密钥」):"
-    echo "   $BRIDGE_ENCRYPT_KEY"
-    echo "[start-all]   已保存 $KEY_FILE(0600),重启复用;查看: cat $KEY_FILE"
+    echo "[start-all] 已生成新加密密钥并保存 $KEY_FILE(0600)"
   fi
+  # 每次启动都打印(与 BRIDGE_TOKEN 一致),供填入 App 档案「加密密钥」
+  echo "[start-all] 🔑 加密密钥(填到 App 档案「加密密钥」): $BRIDGE_ENCRYPT_KEY"
 fi
 
 PIDS=()
