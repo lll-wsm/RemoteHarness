@@ -102,14 +102,10 @@ struct ProfileListView: View {
                                 .controlSize(.small)
                         }
                     }
-                    Text(profile.url)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
                     Text("\(sessionStore.sessions(for: profile.id).count) 个会话"
                          + (profile.lastUsedAt.map { " · 最后使用 \($0.formatted(date: .abbreviated, time: .shortened))" } ?? ""))
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 2)
             }

@@ -107,9 +107,31 @@ private struct ChatContent: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ConnectionStatusBar(state: store.state,
-                                detail: chatStore.queueStatus ?? config.url)
-            Divider()
+            if case .reconnecting = store.state {
+                HStack(spacing: 6) {
+                    Circle().fill(Color.orange).frame(width: 8, height: 8)
+                    Text("网络中断，正在重新连接…")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 6)
+                .background(.bar)
+                Divider()
+            } else if let queue = chatStore.queueStatus {
+                HStack(spacing: 6) {
+                    Circle().fill(Color.orange).frame(width: 8, height: 8)
+                    Text(queue)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 6)
+                .background(.bar)
+                Divider()
+            }
             MessageList(chatStore: chatStore)
                 .frame(maxWidth: .infinity)
             InputBar(
@@ -163,7 +185,7 @@ private struct MessageList: View {
                 LazyVStack(spacing: 12) {
                     if chatStore.messages.isEmpty {
                         ContentUnavailableView(
-                            "已连接 \(chatStore.chatID.map { "· \($0.prefix(8))" } ?? "")",
+                            "远程对话",
                             systemImage: "bubble.left.and.bubble.right",
                             description: Text("输入消息开始远程对话")
                         )
