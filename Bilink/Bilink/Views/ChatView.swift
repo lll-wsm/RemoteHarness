@@ -151,9 +151,11 @@ private struct ChatContent: View {
     }
 }
 
-/// 消息列表:自动滚动到最新;流式期间保持钉在底部。
+/// 消息列表:智能滚动;流式期间钉底跟随，用户上滑回看时停住并提示回到最新。
 private struct MessageList: View {
     let chatStore: ChatStore
+    @State private var isPinned = true
+    @State private var hasNewBelow = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -174,12 +176,64 @@ private struct MessageList: View {
                 }
                 .padding()
             }
+            .onScrollGeometryChange(for: Bool.self) { geo in
+                // 距底 = 内容高 - (偏移 + 视口高);≤120pt 视为钉底
+                let distanceToBottom = geo.contentSize.height - geo.contentOffset.y - geo.containerSize.height
+                return distanceToBottom <= 120
+            } action: { _, isNearBottom in
+                isPinned = isNearBottom
+                if isNearBottom {
+                    hasNewBelow = false // 手动或自动滑回底部时清除提示
+                }
+            }
             .onChange(of: chatStore.messages.count) { _, _ in
-                scrollToLast(proxy)
+                if isPinned {
+                    scrollToLast(proxy, animated: true)
+                }
             }
             .onChange(of: chatStore.messages.last?.text) { _, _ in
-                if chatStore.messages.last?.isStreaming == true {
-                    scrollToLast(proxy)
+                guard chatStore.messages.last?.isStreaming == true else { return }
+                if isPinned {
+                    scrollToLast(proxy, animated: false) // 钉底高频 chunk 直接无动画滚动，防抖抗掉帧
+                } else if !chatStore.isReplayingHistory {
+                    hasNewBelow = true // 离底期间有新内容到达
+                }
+            }
+            .onChange(of: chatStore.messages.last?.isStreaming) { _, streaming in
+                // 流式结束:纯文本 -> Markdown 渲染,高度突变;count/text 均不变,需在此补偿。
+                // async 到下一 runloop,滚到的才是渲染切换后的新高度。
+                if streaming == false, isPinned {
+                    DispatchQueue.main.async {
+                        scrollToLast(proxy, animated: false)
+                    }
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if hasNewBelow {
+                    Button {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            scrollToLast(proxy, animated: true)
+                            hasNewBelow = false
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.down")
+                            Text("回到最新")
+                        }
+                        .font(.footnote.weight(.medium))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(.regularMaterial, in: Capsule())
+                        .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
+                    }
+                    .overlay(alignment: .topTrailing) {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 8, height: 8)
+                            .offset(x: 2, y: -2)
+                    }
+                    .padding(.bottom, 12)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .overlay(alignment: .top) {
@@ -195,9 +249,13 @@ private struct MessageList: View {
         }
     }
 
-    private func scrollToLast(_ proxy: ScrollViewProxy) {
+    private func scrollToLast(_ proxy: ScrollViewProxy, animated: Bool) {
         guard let last = chatStore.messages.last else { return }
-        withAnimation(.easeOut(duration: 0.15)) {
+        if animated {
+            withAnimation(.easeOut(duration: 0.15)) {
+                proxy.scrollTo(last.id, anchor: .bottom)
+            }
+        } else {
             proxy.scrollTo(last.id, anchor: .bottom)
         }
     }

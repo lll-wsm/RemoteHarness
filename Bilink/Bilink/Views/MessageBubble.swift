@@ -15,14 +15,18 @@ struct MessageBubble: View {
                 if !isUser, !message.thought.isEmpty {
                     ThoughtBlockView(text: message.thought)
                 }
-                bubbleContent
-                    .contextMenu {
-                        Button {
-                            UIPasteboard.general.string = message.text
-                        } label: {
-                            Label("复制全文", systemImage: "doc.on.doc")
+                // 正文为空(纯思考阶段)不渲染气泡:思考块自带"思考中…"指示,
+                // 空气泡只剩一个光标符,视觉噪音;完成后正文仍空的同样隐藏。
+                if isUser || !message.text.isEmpty {
+                    bubbleContent
+                        .contextMenu {
+                            Button {
+                                UIPasteboard.general.string = message.text
+                            } label: {
+                                Label("复制全文", systemImage: "doc.on.doc")
+                            }
                         }
-                    }
+                }
             }
             if !isUser { Spacer(minLength: 12) }
         }
@@ -39,18 +43,19 @@ struct MessageBubble: View {
                 .clipShape(RoundedRectangle(cornerRadius: 14))
         } else {
             VStack(alignment: .leading, spacing: 4) {
-                // 流式:isComplete=false 让分块器对不完整围栏/列表降级渲染;
-                // 光标单独放在渲染器下方,避免插入文本破坏 Markdown 解析。
-                ChatMarkdownRenderer(
-                    text: message.text,
-                    context: .assistant,
-                    variant: .compact,
-                    theme: .default,
-                    isComplete: !message.isStreaming
-                )
                 if message.isStreaming {
-                    Text("▌")
-                        .foregroundStyle(.secondary)
+                    // 流式:纯文本 + 光标(零解析开销;光标回到文本尾,纯文本无解析风险)
+                    Text(message.text + "▌")
+                        .textSelection(.enabled)
+                } else {
+                    // 完成:一次性 Markdown 渲染
+                    ChatMarkdownRenderer(
+                        text: message.text,
+                        context: .assistant,
+                        variant: .compact,
+                        theme: .default,
+                        isComplete: true
+                    )
                 }
             }
             .padding(10)

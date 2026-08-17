@@ -1,13 +1,36 @@
+# OS & Editor
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+.claude/
+*.swp
+*.swo
+*~
+
+# Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Node / Bridge runtime
+node_modules/
+bridge/node_modules/
+bridge/sessions.json
+bridge/.encrypt-key
 
 # Xcode 生成物(project.yml 是工程定义源)
 Bilink/Bilink.xcodeproj/
 DerivedData/
 build/
+*.xcuserstate
+*.xcuserdatad
+.swiftpm/
+.build/
 
-# 用户临时笔记(勿提交)
+# 用户临时笔记与配置
 bridge/新建Markdown文档.md
-
-# 桥加密密钥(auto 模式生成,勿提交)
-bridge/.encrypt-key
+.env
+.env.local
+.env.*.local
