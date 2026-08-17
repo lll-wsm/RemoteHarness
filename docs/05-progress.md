@@ -1,6 +1,6 @@
 # 05 进度与下一步
 
-> 记录当前完成进度、遗留事项与后续计划。最后更新:2026-08-16。
+> 记录当前完成进度、遗留事项与后续计划。最后更新:2026-08-17。
 
 ## 1. 已完成
 
@@ -29,9 +29,10 @@
 
 - [ ] **grok 工具层验证**:目前验证了文本对话流式;工具调用(查文件、跑命令)在第三方模型(DeepSeek/GLM)上的函数调用格式是否被 grok 正确序列化,**尚未完整验证**(e2e 中 MCP codegraph 初始化正常,可作为部分依据);
 - [ ] **Plan Mode / Rewind 透传**:协议层面支持(agentCapabilities 已声明),未实测;
-- [ ] **会话恢复实测**:`session/load { chatID }` 跨桥重启恢复未端到端验证;
+- [ ] **会话恢复后远程上下文校验**:本地历史 + session/load 双通道已验证;桥重启导致注册表丢失时,客户端保留本地历史并提示新建(已实现),远程上下文随之丢失属预期;
 - [ ] **限流/白名单经真实 cloudflared 的端到端**:本地模拟已验证,真实隧道下按 CF-Connecting-IP 生效需在公网实测;
-- [ ] 邮箱 OTP 入口验证(Cloudflare Access):被「无域名/无外卡」卡住;备选 Tailscale / auth-proxy。
+- [ ] 邮箱 OTP 入口验证(Cloudflare Access):被「无域名/无外卡」卡住;备选 Tailscale / auth-proxy;
+- [ ] 第三方 API 计费影响:DeepSeek 直连 / opencode 网关余额不足时返回 402,客户端会显示"API 额度不足"错误横幅;GLM Ark(glm-5-2)当前可用。
 
 ## 3. 下一步(M2 起)
 
@@ -40,6 +41,7 @@
 - [x] **M2.2 聊天(2026-08-17)**:ChatStore(session/new → chatID、session/prompt 发送、session/cancel 停止、流式事件组装:user_message_chunk 忽略回显 / agent_thought_chunk→思考 / agent_message_chunk→文本 / turn_completed→收尾、_x.ai/queue/changed→排队状态);UI:消息气泡(用户右/助手左)、流式光标、思考折叠块、多行输入栏(发送/停止)、自动滚动;**实测(CLI 驱动真 ChatStore + 真 grok)**:建会话 → 发消息 → 助手回复"OK"+ 思考块,链路通过;
 - [x] **M2.3 会话持久与断线重连(2026-08-17)**:chatID 按连接 URL 持久化 UserDefaults,重进/重连后 `session/load {chatID}` 恢复(实测:两次运行加载同一 chatID,对话延续);断线自动重连(指数退避 1s→30s,重连后重新握手 + 会话恢复),状态条显示"重连中"(橙点);连接页记忆上次 URL/名称;**实测**:CLI 两次运行同 chatID 恢复通过;重连运行时行为待实体机验证(断隧道→重连中→恢复);
 - [x] **M2.4 打磨(2026-08-17)**:token 存 Keychain(按连接 URL 分键,首次解锁后可用、不同步 iCloud;连接页切换地址自动带出已存 token);错误态:session/send 前置清理、聊天页错误横幅可关闭;iPad 宽屏布局:聊天列与输入栏最大宽度 720pt 居中;
+- [x] **M2.5 会话管理(2026-08-17)**:多历史会话目录(SessionStore,index.json 持久化标题/摘要/时间/条数)+ 历史会话列表 UI(切换/新建/滑动删除);ChatStore 重构:恢复最近会话(目录优先,UserDefaults 兼容旧版)、切换/新建会话、**session/load 失败保留本地历史并提示(不静默新建)**;本地消息记录持久化 BilinkSessions/<chatID>.json;桥转发通知注入 chatID,**切换会话防跨会话串流**;API 错误透传(`_x.ai/session_notification` retry_state → 错误横幅,如"API 额度不足");**实测(真 grok,GLM 模型)**:清空状态两次运行——首次新建会话+流式回复、第二次重开恢复**同一 chatID 未新建**、本地历史(👤+🤖)完整还原并继续对话累积、目录索引跨进程持久;
 - [ ] **M3(候选)**:会话列表多开、工具活动渲染、隧道预设;
 
 ### M3:会话与工具增强
@@ -54,8 +56,8 @@
 ## 4. 常用启动流程(备忘)
 
 ```sh
-# 1) grok agent serve(第三方模型,无需 xAI 登录)
-grok -m opencode-deepseek-v4-flash agent serve --bind 127.0.0.1:2419 --secret <SECRET> &
+# 1) grok agent serve(第三方模型,无需 xAI 登录;余额可用时选 glm-5-2)
+grok -m glm-5-2 agent serve --bind 127.0.0.1:2419 --secret <SECRET> &
 
 # 2) 桥 + 隧道(一键)
 cd RemoteHarness/bridge

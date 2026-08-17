@@ -187,13 +187,18 @@ export class AcpServer {
 
   routeNotification(notification) {
     const sessionId = notification.params?.sessionId ?? notification.params?.session?.id ?? null;
-    let conn = sessionId ? this.grokSessionConns.get(sessionId) : null;
-    if (!conn && sessionId) {
+    let conn = null;
+    if (sessionId) {
       const record = this.sessions.list().find((r) => r.grokSessionId === sessionId);
-      if (record) {
-        conn = this.sessionConns.get(record.chatID);
-        if (conn) this.grokSessionConns.set(sessionId, conn);
-      }
+      const chatID = record?.chatID ?? null;
+      if (!chatID) return;
+      conn = this.sessionConns.get(chatID);
+      if (conn) this.grokSessionConns.set(sessionId, conn);
+      // 注入桥侧的 chatID,客户端据此只处理当前会话的事件(多会话切换防串流)
+      notification = {
+        ...notification,
+        params: { ...(notification.params ?? {}), chatID },
+      };
     }
     if (!conn || conn.readyState !== WebSocket.OPEN) return;
     conn.send(JSON.stringify(notification));

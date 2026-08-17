@@ -1,10 +1,12 @@
 import SwiftUI
 
-/// 聊天页:M2.2 完整实现——消息列表(流式)+ 输入栏 + 状态条。
+/// 聊天页:M2.2 完整实现——消息列表(流式)+ 输入栏 + 状态条;M2.3 会话管理——历史会话列表。
 struct ChatView: View {
     @Bindable var store: ConnectionStore
     let config: ConnectionConfig
+    let sessionStore: SessionStore
     @State private var chatStore: ChatStore?
+    @State private var showSessions = false
 
     var body: some View {
         Group {
@@ -17,15 +19,45 @@ struct ChatView: View {
         }
         .task {
             if chatStore == nil, let client = store.client {
-                let chat = ChatStore(client: client, connectionURL: config.url)
+                let chat = ChatStore(client: client, connectionURL: config.url,
+                                     sessionStore: sessionStore)
                 // 断线重连成功后重新加载会话
                 store.onReconnected = { Task { await chat.prepareSession() } }
                 chatStore = chat
             }
         }
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    showSessions = true
+                } label: {
+                    Label("会话", systemImage: "clock")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("断开") { store.disconnect() }
+            }
+        }
+        .sheet(isPresented: $showSessions) {
+            if let chatStore {
+                SessionListView(
+                    sessions: sessionStore.sessions(for: config.url),
+                    currentChatID: chatStore.chatID,
+                    onSelect: { meta in
+                        showSessions = false
+                        Task { await chatStore.switchTo(chatID: meta.chatID) }
+                    },
+                    onNew: {
+                        showSessions = false
+                        Task { await chatStore.startNewSession() }
+                    },
+                    onDelete: { meta in
+                        sessionStore.delete(chatID: meta.chatID)
+                        if chatStore.chatID == meta.chatID {
+                            Task { await chatStore.startNewSession() }
+                        }
+                    }
+                )
             }
         }
     }
@@ -48,6 +80,7 @@ private struct ChatContent: View {
             InputBar(
                 text: $input,
                 canSend: chatStore.isSessionReady &&
+                    !chatStore.isReplayingHistory &&
                     !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 isResponding: chatStore.isResponding,
                 onSend: {
@@ -113,6 +146,16 @@ private struct MessageList: View {
             .onChange(of: chatStore.messages.last?.text) { _, _ in
                 if chatStore.messages.last?.isStreaming == true {
                     scrollToLast(proxy)
+                }
+            }
+            .overlay(alignment: .top) {
+                if chatStore.isReplayingHistory {
+                    Label("正在加载历史…", systemImage: "clock")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(8)
+                        .background(.bar, in: RoundedRectangle(cornerRadius: 8))
+                        .padding(.top, 8)
                 }
             }
         }
