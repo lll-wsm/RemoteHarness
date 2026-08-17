@@ -44,6 +44,13 @@
 - [x] **M2.5 会话管理(2026-08-17)**:多历史会话目录(SessionStore,index.json 持久化标题/摘要/时间/条数)+ 历史会话列表 UI(切换/新建/滑动删除);ChatStore 重构:恢复最近会话(目录优先,UserDefaults 兼容旧版)、切换/新建会话、**session/load 失败保留本地历史并提示(不静默新建)**;本地消息记录持久化 BilinkSessions/<chatID>.json;桥转发通知注入 chatID,**切换会话防跨会话串流**;API 错误透传(`_x.ai/session_notification` retry_state → 错误横幅,如"API 额度不足");**实测(真 grok,GLM 模型)**:清空状态两次运行——首次新建会话+流式回复、第二次重开恢复**同一 chatID 未新建**、本地历史(👤+🤖)完整还原并继续对话累积、目录索引跨进程持久;
 - [ ] **M3(候选)**:工具活动渲染、隧道预设;
 
+### 聊天 UI 优化 M1(Markdown 渲染,2026-08-17,方案见 docs/11)
+- [x] **依赖接入**:SwiftUIChatMarkdown(自研,github.com/lll-wsm)进 project.yml(xcodegen 正路),部署目标 iOS **17→18**(包最低要求);GUI 添加实测进不了依赖图(解析成功但 `Target dependency graph` 只有 app,`import` 报 Unable to find module dependency),必须写 project.yml;已验证:xcodegen 重生成后依赖图 17 targets、静态链接、构建通过;
+- [x] **MessageBubble 重构**:助手消息 `ChatMarkdownRenderer`(`.assistant`/`.compact`/`.default`,`isComplete: !isStreaming` 流式降级);用户消息保持纯文本(accent 背景上块级元素视觉冲突);**▌光标移出文本**改为渲染器下方独立光标(避免破坏 Markdown 解析);长按气泡「复制全文」菜单(代码块复制按钮待包 PR);
+- [x] **headless 解析断言**(链接构建产物模块直接测试):标题/引用/代码/表格/列表块全部识别;流式不完整代码围栏(isComplete=false)安全降级为 code 块;流式纯文本正常 prose;空文本 0 块;
+- [x] **模拟器冒烟**:App 安装启动无崩溃、进程存活;渲染 harness(复刻气泡结构)截图像素分析:检出蓝(user 气泡)+ 淡灰/内容区,配色预期;
+- [ ] **后续**:M2 智能滚动、M3 失败重试+时间戳/思考块修正、M4 锁 revision+收尾(见 docs/11 阶段 2-5);代码块复制按钮走 SwiftUIChatMarkdown 包 PR。
+
 ### M3.1 多连接多会话(2026-08-17,已实现)
 - [x] **桥扩展**:`sessions/list`(只读注册表,过滤不可恢复孤儿)+ `sessions/remove`(尽力关闭 grok 会话,失败不阻塞)+ `handleSessionNew` 失败回滚(不再产生 grokSessionId=null 孤儿);
 - [x] **多连接 Profile**:`ConnectionProfile`/`ProfileStore`(profiles.json,token 存 Keychain 键 `bilink.token.profile.<id>`),`SessionMeta` 归属键由 URL 改为 **profileID**,新增 `isRemoteOnly`;`SessionStore` 支持 rename/removeProfile 级联/mergeRemote 跨 profile 按 chatID 去重;

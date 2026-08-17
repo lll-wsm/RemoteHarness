@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 RemoteHarness:让 iPad/iPhone 上的 Bilink(比邻)App 远程驱动 Mac/Linux 上的 grok(Grok Build CLI),获得与本地一致的流式聊天体验。三个组成部分:
 
 - `bridge/` — Node.js 桥(daemon,跑在远程机器上,与 grok 同机)
-- `Bilink/` — SwiftUI iOS App(ACP 客户端,iOS 17+,XcodeGen 工程)
+- `Bilink/` — SwiftUI iOS App(ACP 客户端,iOS 18+,XcodeGen 工程)
 - `docs/` — 开发文档(中文),`HANDOFF.md` 为交接总览;协议细节见 `docs/02-acp-protocol.md`,启动/测试手册见 `docs/08-startup.md`
 
 文档与 commit message 均使用中文。
@@ -40,6 +40,7 @@ grok agent serve (ACP)                          127.0.0.1:2419
 - 鉴权门是硬门槛:`ProfileListView` 里点机器 → initialize 握手成功才进 `ChatView`,失败留在机器列表并提示;`ConnectionStore` 管状态机(idle/connecting/connected/reconnecting/failed)
 - `ACPClient`/`ACPWire`/`ACPError`(Networking)基于原生 `URLSessionWebSocketTask`,零第三方依赖;可选应用层加密(`encryptionKey` 非空时 HKDF→AES-256-GCM 全帧加解密,与桥 `BRIDGE_ENCRYPT_KEY` 一致,见 `secure-channel.js`)
 - `ChatStore` 聊天循环、`SessionStore` 会话持久化(`~/Library/Application Support/BilinkSessions/`),token 只存 Keychain(`KeychainService`),证书校验不提供跳过开关
+- Markdown 渲染:SPM 依赖 `SwiftUIChatMarkdown`(自研,github.com/lll-wsm/SwiftUIChatMarkdown,iOS 18+),**只集成 `ChatMarkdownRenderer`**(不用其 Engine/View/SQLite 缓存),见 docs/11;工程依赖必须写 `project.yml` 再 xcodegen 生成,**勿用 Xcode GUI 添加**(实测 GUI 添加的包进不了依赖图)
 - Xcode 工程由 XcodeGen 从 `project.yml` 生成;改工程配置要改 `project.yml` 再重新生成,不要直接编辑 `.xcodeproj`
 
 ### ACP 协议要点(0.10.4 实测校准)

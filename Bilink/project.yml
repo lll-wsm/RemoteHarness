@@ -2,14 +2,20 @@ name: Bilink
 options:
   bundleIdPrefix: com.remoteharness
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "18.0"
   createIntermediateGroups: true
+packages:
+  SwiftUIChatMarkdown:
+    url: https://github.com/lll-wsm/SwiftUIChatMarkdown
+    branch: main
 targets:
   Bilink:
     type: application
     platform: iOS
     sources:
       - Bilink
+    dependencies:
+      - package: SwiftUIChatMarkdown
     scheme: {}
     settings:
       base:
