@@ -1,10 +1,13 @@
 import Foundation
+import CryptoKit
 import Observation
 
 /// ACP JSON-RPC 客户端(URLSessionWebSocketTask 实现)。
 /// 职责:
 /// - WebSocket 建立(Bearer 鉴权)→ initialize 握手 → 标记 ready;
 /// - 请求/响应按 id 配对;通知分发给 handler;
+/// - 可选应用层安全通道:encryptionKey 非空时,所有帧经 HKDF→AES-256-GCM 加解密
+///   (与桥 BRIDGE_ENCRYPT_KEY 一致;密钥为线下约定、从不传输);
 /// - 连接断开时失败所有在途请求。
 @Observable
 final class ACPClient {
@@ -19,15 +22,19 @@ final class ACPClient {
     private var nextId = 1
     private var pending: [Int: (Result<AnyCodable?, ACPError>) -> Void] = [:]
     private var receiveTask: Task<Void, Never>?
+    private var secureKey: SymmetricKey?
 
     // MARK: - 连接与握手
 
     /// 建立连接并完成 initialize 握手;超时抛 .timeout。
-    func start(url: String, token: String, timeout: TimeInterval = 10) async throws {
+    /// encryptionKey 非空时启用应用层加密(与桥 BRIDGE_ENCRYPT_KEY 一致)。
+    func start(url: String, token: String, timeout: TimeInterval = 10,
+               encryptionKey: String? = nil) async throws {
         guard let wsURL = URL(string: url), let scheme = wsURL.scheme,
               scheme == "ws" || scheme == "wss" else {
             throw ACPError.unreachable
         }
+        secureKey = encryptionKey.map(Self.deriveSecureKey)
 
         // 前置探测:桥的 /healthz 与 WebSocket 握手共用同一套 token 鉴权,
         // 用 HTTP 探测精确分类 401(token 错)/ 超时 / 不可达,而非等 WebSocket 的泛化错误。
@@ -139,7 +146,10 @@ final class ACPClient {
             }
             let request = RPCRequest(id: id, method: method, params: params)
             do {
-                let data = try JSONEncoder().encode(request)
+                var data = try JSONEncoder().encode(request)
+                if let key = secureKey {
+                    data = try Self.encrypt(data, using: key)
+                }
                 task.send(.data(data)) { [weak self] error in
                     if let error {
                         self?.pending.removeValue(forKey: id)?(
@@ -165,18 +175,67 @@ final class ACPClient {
                     case .string(let text):
                         self.handleText(text)
                     case .data(let data):
-                        if let text = String(data: data, encoding: .utf8) {
-                            self.handleText(text)
-                        }
+                        self.handleData(data)
                     @unknown default:
                         break
                     }
                 } catch {
-                    self.handleDisconnect()
+                    self.handleDisconnect(secureFailure: task.closeCode.rawValue == 4001)
                     return
                 }
             }
         }
+    }
+
+    // MARK: - 帧处理与安全通道
+
+    private func handleData(_ data: Data) {
+        guard let key = secureKey else {
+            if let text = String(data: data, encoding: .utf8) {
+                handleText(text)
+            }
+            return
+        }
+        guard let decrypted = try? Self.decrypt(data, using: key),
+              let text = String(data: decrypted, encoding: .utf8) else {
+            // 密文校验失败(密钥不匹配/被篡改):安全失败,不自动重连
+            handleDisconnect(secureFailure: true)
+            return
+        }
+        handleText(text)
+    }
+
+    /// HKDF 派生密钥:与桥 secure-channel.js 的 SALT/INFO 保持一致。
+    private static func deriveSecureKey(from encryptionKey: String) -> SymmetricKey {
+        HKDF<SHA256>.deriveKey(
+            inputKeyMaterial: SymmetricKey(data: Data(encryptionKey.utf8)),
+            salt: Data(),
+            info: Data("bilink:e2e:v1".utf8),
+            outputByteCount: 32)
+    }
+
+    /// AES-256-GCM 加密,输出 = nonce(12B) || ciphertext || tag。
+    /// 注意:sealed.combined 已含 nonce,须用 ciphertext + tag 手动拼接。
+    private static func encrypt(_ plaintext: Data, using key: SymmetricKey) throws -> Data {
+        let nonce = AES.GCM.Nonce()
+        let sealed = try AES.GCM.seal(plaintext, using: key, nonce: nonce)
+        var out = Data()
+        nonce.withUnsafeBytes { out.append(contentsOf: $0) }
+        out.append(contentsOf: sealed.ciphertext)
+        out.append(contentsOf: sealed.tag)
+        return out
+    }
+
+    private static func decrypt(_ frame: Data, using key: SymmetricKey) throws -> Data {
+        guard frame.count > 12 + 16 else {
+            throw ACPError.transport("帧过短,无法解密")
+        }
+        let nonce = try AES.GCM.Nonce(data: frame.prefix(12))
+        let sealed = frame.dropFirst(12)
+        let box = try AES.GCM.SealedBox(nonce: nonce,
+                                        ciphertext: sealed.dropLast(16),
+                                        tag: sealed.suffix(16))
+        return try AES.GCM.open(box, using: key)
     }
 
     private func handleText(_ text: String) {
@@ -195,10 +254,15 @@ final class ACPClient {
         }
     }
 
-    private func handleDisconnect() {
+    private func handleDisconnect(secureFailure: Bool = false) {
         isReady = false
-        failAllPending(with: .transport("连接已断开"))
-        onDisconnect?()
+        if secureFailure {
+            // 安全通道失败(密钥不匹配/被篡改):不触发自动重连,由调用方展示错误
+            failAllPending(with: .transport("安全通道校验失败,请检查加密密钥是否与桥一致"))
+        } else {
+            failAllPending(with: .transport("连接已断开"))
+            onDisconnect?()
+        }
     }
 
     private func failAllPending(with error: ACPError) {

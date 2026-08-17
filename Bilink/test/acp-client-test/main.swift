@@ -11,6 +11,13 @@ let url = args.count > 2 ? args[2] : "ws://127.0.0.1:8777"
 let token = args.count > 3 ? args[3] : "test-token"
 let profileArg = args.count > 4 ? args[4] : "CLI 测试机"
 let recoverFlag = args.contains("--recover")
+// 应用层加密密钥(与桥 BRIDGE_ENCRYPT_KEY 一致):--key <值>
+let encryptionKey: String? = {
+    if let i = args.firstIndex(of: "--key"), args.count > i + 1 {
+        return args[i + 1]
+    }
+    return nil
+}()
 
 func fail(_ error: Error) -> Never {
     if let acp = error as? ACPError {
@@ -52,7 +59,7 @@ Task {
         let profile = ProfileStore().add(name: "临时", url: url, token: token)
         let client = ACPClient()
         do {
-            try await client.start(url: url, token: token, timeout: 5)
+            try await client.start(url: url, token: token, timeout: 5, encryptionKey: encryptionKey)
         } catch {
             fail(error)
         }
@@ -78,7 +85,7 @@ Task {
     if mode == "connect" {
         let client = ACPClient()
         do {
-            try await client.start(url: url, token: token, timeout: 5)
+            try await client.start(url: url, token: token, timeout: 5, encryptionKey: encryptionKey)
         } catch {
             fail(error)
         }
@@ -106,7 +113,7 @@ Task {
 
     let client = ACPClient()
     do {
-        try await client.start(url: url, token: useToken, timeout: 5)
+        try await client.start(url: url, token: useToken, timeout: 5, encryptionKey: encryptionKey)
     } catch {
         fail(error)
     }

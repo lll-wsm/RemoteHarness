@@ -18,6 +18,7 @@ GROK_MODEL="${GROK_MODEL:-$(sed -n 's/^default = "\(.*\)"/\1/p' ~/.grok/config.t
 GROK_MODEL="${GROK_MODEL:-glm-5-2}"
 BRIDGE_PORT="${BRIDGE_PORT:-8777}"
 GROK_SERVE_PORT="${GROK_SERVE_PORT:-2419}"
+BRIDGE_ENCRYPT_KEY="${BRIDGE_ENCRYPT_KEY:-}"
 
 command -v grok >/dev/null 2>&1 || { echo "[start-all] 未找到 grok CLI" >&2; exit 1; }
 command -v node >/dev/null 2>&1 || { echo "[start-all] 未找到 node" >&2; exit 1; }
@@ -84,6 +85,7 @@ BRIDGE_TOKEN="$BRIDGE_TOKEN" \
 GROK_SERVE_SECRET="$GROK_SERVE_SECRET" \
 BRIDGE_PORT="$BRIDGE_PORT" \
 GROK_SERVE_URL="ws://127.0.0.1:$GROK_SERVE_PORT" \
+BRIDGE_ENCRYPT_KEY="$BRIDGE_ENCRYPT_KEY" \
   node src/index.js >"$BRIDGE_LOG" 2>&1 &
 PIDS+=($!)
 
@@ -128,6 +130,9 @@ echo "   桥:        ws://127.0.0.1:$BRIDGE_PORT"
 [ -n "$TUNNEL_URL" ] && echo "   公网:      wss://${TUNNEL_URL#https://}"
 echo "   BRIDGE_TOKEN: $BRIDGE_TOKEN"
 echo "   密钥已复用:GROK_SERVE_SECRET(长度 ${#GROK_SERVE_SECRET})"
+if [ -n "$BRIDGE_ENCRYPT_KEY" ]; then
+  echo "   🔒 加密必需模式已开启(BRIDGE_ENCRYPT_KEY):App 档案需配置同一加密密钥"
+fi
 echo "   验证:      curl -s \"http://127.0.0.1:${BRIDGE_PORT}/healthz?token=${BRIDGE_TOKEN}\""
 echo "   e2e 测试:  BRIDGE_TOKEN=$BRIDGE_TOKEN node scripts/e2e.mjs ws://127.0.0.1:$BRIDGE_PORT \"你好\""
 echo "   日志:      serve=$SERVE_LOG 桥=$BRIDGE_LOG 隧道=$TUNNEL_LOG"

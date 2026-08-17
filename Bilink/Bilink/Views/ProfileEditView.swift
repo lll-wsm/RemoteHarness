@@ -8,6 +8,7 @@ struct ProfileEditView: View {
     @State private var name = ""
     @State private var url = ""
     @State private var token = ""
+    @State private var encryptKey = ""
 
     private var isNew: Bool { profile == nil }
 
@@ -23,6 +24,11 @@ struct ProfileEditView: View {
                 }
                 Section("Token") {
                     SecureField(isNew ? "桥的 BRIDGE_TOKEN" : "桥的 BRIDGE_TOKEN(留空不改)", text: $token)
+                }
+                Section("加密密钥(可选)") {
+                    SecureField(isNew ? "与桥 BRIDGE_ENCRYPT_KEY 一致" : "留空不改;设置后隧道内也无法读取会话内容", text: $encryptKey)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
                 }
             }
             .navigationTitle(isNew ? "添加机器" : "编辑机器")
@@ -57,9 +63,12 @@ struct ProfileEditView: View {
             var updated = profile
             updated.name = trimmedName
             updated.url = trimmedURL
-            profileStore.update(updated, token: token.isEmpty ? nil : token)
+            profileStore.update(updated,
+                                token: token.isEmpty ? nil : token,
+                                encryptKey: encryptKey.isEmpty ? nil : encryptKey)
         } else {
-            profileStore.add(name: trimmedName, url: trimmedURL, token: token)
+            profileStore.add(name: trimmedName, url: trimmedURL, token: token,
+                             encryptKey: encryptKey.isEmpty ? nil : encryptKey)
         }
         dismiss()
     }

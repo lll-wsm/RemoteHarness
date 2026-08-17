@@ -23,7 +23,10 @@ const grok = new GrokClient({
 });
 grok.connect();
 
-const acp = new AcpServer({ grok, sessions, defaultCwd: config.defaultCwd });
+const acp = new AcpServer({ grok, sessions, defaultCwd: config.defaultCwd, encryptKey: config.encryptKey });
+if (config.encryptKey) {
+  console.log("[bridge] 加密必需模式:所有客户端连接须使用 BRIDGE_ENCRYPT_KEY(应用层 AES-256-GCM)");
+}
 
 const httpServer = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);

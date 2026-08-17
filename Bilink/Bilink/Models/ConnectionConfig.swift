@@ -8,4 +8,6 @@ struct ConnectionConfig: Codable, Equatable {
     var token: String
     var agent: String = "grok"   // 多 agent 预留(默认 grok)
     var profileID: UUID
+    /// 应用层加密密钥(可选;与桥 BRIDGE_ENCRYPT_KEY 一致)。仅内存持有,不落盘。
+    var encryptionKey: String?
 }

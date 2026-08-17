@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { isAuthorized, clientIp } from "./auth.js";
 import { RateLimiter } from "./rate-limiter.js";
+import { deriveKey, encrypt, decrypt } from "./secure-channel.js";
 
 // 对 iPad 暴露的 ACP 服务端(JSON-RPC 2.0 over WebSocket)。
 // - initialize:桥本地应答(协议协商);
@@ -18,11 +19,14 @@ const SESSION_SCOPED_METHODS = new Set([
 ]);
 
 export class AcpServer {
-  constructor({ grok, sessions, rateLimiter, defaultCwd }) {
+  constructor({ grok, sessions, rateLimiter, defaultCwd, encryptKey }) {
     this.grok = grok;
     this.sessions = sessions;
     this.rateLimiter = rateLimiter ?? new RateLimiter();
     this.defaultCwd = defaultCwd; // session/new、session/load 未带 cwd 时的兜底
+    // 应用层安全通道:encryptKey 非空时开启「加密必需」模式(每帧 AES-256-GCM)
+    this.secureKey = deriveKey(encryptKey);
+    this.encryptionRequired = Boolean(encryptKey);
     this.conns = new Set(); // 所有 iPad 连接
     this.connSessions = new Map(); // conn -> chatID
     this.sessionConns = new Map(); // chatID -> conn
@@ -76,9 +80,33 @@ export class AcpServer {
   }
 
   async handleMessage(ws, data) {
+    const raw = Buffer.isBuffer(data) ? data : Buffer.from(data);
+    let text;
+    if (ws.secure) {
+      // 已建立安全通道:所有帧按密文处理
+      try {
+        text = decrypt(this.secureKey, raw);
+      } catch (err) {
+        console.warn(`[bridge] 密文解密失败,断开: ${err.message}`);
+        ws.close(4001, "secure channel decrypt failed");
+        return;
+      }
+    } else if (this.encryptionRequired) {
+      // 加密必需模式:首帧必须是密文(明文直接拒绝)
+      try {
+        text = decrypt(this.secureKey, raw);
+        ws.secure = true;
+      } catch {
+        ws.close(4001, "secure channel required");
+        return;
+      }
+    } else {
+      // 明文模式(未配置密钥):兼容旧客户端;二进制乱码视为非法帧忽略
+      text = raw.toString("utf8");
+    }
     let msg;
     try {
-      msg = JSON.parse(data.toString());
+      msg = JSON.parse(text);
     } catch {
       return;
     }
@@ -258,7 +286,7 @@ export class AcpServer {
         params: { ...(notification.params ?? {}), chatID },
       };
     }
-    conn.send(JSON.stringify(notification));
+    this.send(conn, notification);
   }
 
   bindConn(ws, chatID, grokSessionId) {
@@ -291,7 +319,10 @@ export class AcpServer {
   }
 
   send(ws, obj) {
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+    if (ws.readyState !== WebSocket.OPEN) return;
+    const payload = JSON.stringify(obj);
+    const frame = ws.secure ? encrypt(this.secureKey, payload) : payload;
+    ws.send(frame);
   }
 }
 

@@ -8,6 +8,7 @@ const allowNoAuth = process.env.BRIDGE_ALLOW_NO_AUTH === "1";
 const bindHost = process.env.BRIDGE_BIND ?? "127.0.0.1";
 const grokServeUrl = process.env.GROK_SERVE_URL ?? "ws://127.0.0.1:2419";
 const grokServeSecret = process.env.GROK_SERVE_SECRET ?? "";
+const encryptKey = process.env.BRIDGE_ENCRYPT_KEY ?? ""; // 非空 = 开启「加密必需」模式(应用层 AES-GCM)
 const registryFile = process.env.BRIDGE_REGISTRY_FILE ?? "sessions.json";
 const defaultCwd = process.env.BRIDGE_CWD ?? os.homedir(); // 远程 grok 会话的工作目录兜底
 const allowIps = (process.env.BRIDGE_ALLOW_IPS ?? "")
@@ -31,6 +32,7 @@ export const config = {
   bindHost,
   grokServeUrl,
   grokServeSecret,
+  encryptKey,
   registryFile,
   defaultCwd,
   allowIps,

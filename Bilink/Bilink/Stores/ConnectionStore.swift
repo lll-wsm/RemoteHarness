@@ -51,7 +51,8 @@ final class ConnectionStore {
                 guard let self, let client, self.client === client else { return }
                 Task { await self.reconnect(config) }
             }
-            try await client.start(url: config.url, token: config.token, timeout: 8)
+            try await client.start(url: config.url, token: config.token, timeout: 8,
+                                   encryptionKey: config.encryptionKey)
             // 连接建立期间用户可能已手动断开/删除 profile:丢弃该连接,不进已连接态
             guard !userDisconnect else {
                 client.close()

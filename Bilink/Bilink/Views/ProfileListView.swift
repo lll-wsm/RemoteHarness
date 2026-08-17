@@ -120,7 +120,8 @@ struct ProfileListView: View {
             return
         }
         let config = ConnectionConfig(name: profile.name, url: profile.url, token: token,
-                                      profileID: profile.id)
+                                      profileID: profile.id,
+                                      encryptionKey: profileStore.encryptKey(for: profile.id))
         Task {
             await store.connect(config)
             // 在途期间 profile 可能被删除:仅当仍存在且连接成功时才刷新 lastUsedAt

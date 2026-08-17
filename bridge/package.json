@@ -9,7 +9,7 @@
     "start": "node src/index.js",
     "auth-proxy": "node src/auth-proxy.mjs",
     "gen-token": "node scripts/gen-token.mjs",
-    "check": "node --check src/index.js && node --check src/config.js && node --check src/auth.js && node --check src/acp-server.js && node --check src/session-manager.js && node --check src/grok-client.js && node --check src/rate-limiter.js && node --check src/auth-proxy.mjs && node --check scripts/smoke.mjs && node --check scripts/e2e.mjs && node --check scripts/gen-token.mjs"
+    "check": "node --check src/index.js && node --check src/config.js && node --check src/auth.js && node --check src/acp-server.js && node --check src/session-manager.js && node --check src/grok-client.js && node --check src/rate-limiter.js && node --check src/secure-channel.js && node --check src/auth-proxy.mjs && node --check scripts/smoke.mjs && node --check scripts/e2e.mjs && node --check scripts/gen-token.mjs"
   },
   "engines": {
     "node": ">=18"

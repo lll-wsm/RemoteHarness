@@ -19,28 +19,39 @@ final class ProfileStore {
     // MARK: - 查询
 
     func token(for id: UUID) -> String? {
-        KeychainService.read(key(for: id))
+        KeychainService.read(key(for: id, suffix: "token"))
+    }
+
+    /// 应用层加密密钥(可选;与桥 BRIDGE_ENCRYPT_KEY 一致,线下约定、从不传输)。
+    func encryptKey(for id: UUID) -> String? {
+        KeychainService.read(key(for: id, suffix: "encryptKey"))
     }
 
     // MARK: - 增删改
 
     @discardableResult
-    func add(name: String, url: String, token: String) -> ConnectionProfile {
+    func add(name: String, url: String, token: String, encryptKey: String? = nil) -> ConnectionProfile {
         let profile = ConnectionProfile(id: UUID(), name: name, url: url,
                                         createdAt: Date(), lastUsedAt: Date())
-        KeychainService.save(token, forKey: key(for: profile.id))
+        KeychainService.save(token, forKey: key(for: profile.id, suffix: "token"))
+        if let encryptKey, !encryptKey.isEmpty {
+            KeychainService.save(encryptKey, forKey: key(for: profile.id, suffix: "encryptKey"))
+        }
         profiles.append(profile)
         sortByLastUsed()
         save()
         return profile
     }
 
-    /// 更新 name/url;token 非 nil 时同时更新 Keychain(token 编辑时留空表示不改)。
-    func update(_ profile: ConnectionProfile, token: String?) {
+    /// 更新 name/url;token/encryptKey 非 nil 时同时更新 Keychain(留空表示不改)。
+    func update(_ profile: ConnectionProfile, token: String?, encryptKey: String?) {
         guard let index = profiles.firstIndex(where: { $0.id == profile.id }) else { return }
         profiles[index] = profile
         if let token {
-            KeychainService.save(token, forKey: key(for: profile.id))
+            KeychainService.save(token, forKey: key(for: profile.id, suffix: "token"))
+        }
+        if let encryptKey {
+            KeychainService.save(encryptKey, forKey: key(for: profile.id, suffix: "encryptKey"))
         }
         save()
     }
@@ -53,17 +64,18 @@ final class ProfileStore {
         save()
     }
 
-    /// 删除机器:级联 Keychain token;本地会话由调用方一并清理(SessionStore.removeProfile)。
+    /// 删除机器:级联 Keychain token/加密密钥;本地会话由调用方一并清理(SessionStore.removeProfile)。
     func delete(id: UUID) {
         profiles.removeAll { $0.id == id }
-        KeychainService.delete(key(for: id))
+        KeychainService.delete(key(for: id, suffix: "token"))
+        KeychainService.delete(key(for: id, suffix: "encryptKey"))
         save()
     }
 
     // MARK: - 持久化
 
-    private func key(for id: UUID) -> String {
-        "bilink.token.profile.\(id.uuidString)"
+    private func key(for id: UUID, suffix: String) -> String {
+        "bilink.\(suffix).profile.\(id.uuidString)"
     }
 
     private func sortByLastUsed() {
