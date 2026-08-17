@@ -28,7 +28,31 @@
 
 ## 3. 启动流程
 
-### 3.1 启动 grok agent serve
+### 3.1 一键启动完整链路(start-all.sh,推荐)
+
+`bridge/scripts/start-all.sh` 依次启动 **grok agent serve + 桥 + cloudflared 隧道**,自动完成密钥处理、就绪检查、公网地址获取;Crtl+C 同时关闭全部进程。
+
+```sh
+cd RemoteHarness/bridge
+./scripts/start-all.sh
+```
+
+环境变量(均有默认值):
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `GROK_SERVE_SECRET` | 自动生成 | serve 与桥共用;脚本启动时打印长度,复用请显式传入 |
+| `BRIDGE_TOKEN` | 自动生成 | **启动时打印,填到 iPad 连接页**;复用请显式传入 |
+| `GROK_MODEL` | glm-5-2 | config.toml 的 `[model.xxx]` 段名 |
+| `PROBE` | 0 | `PROBE=1` 时先用 `grok -p` 探测模型可用性(余额不足提前报错) |
+| `TUNNEL` | 1 | `TUNNEL=0` 跳过 cloudflared,仅局域网 |
+| `BRIDGE_PORT` / `GROK_SERVE_PORT` | 8777 / 2419 | 端口 |
+
+就绪后打印:模型、桥地址、**公网 wss 地址**、BRIDGE_TOKEN、healthz 与 e2e 测试命令、各进程日志路径。
+
+> 若需跳过 serve/隧道单独起桥,用 `scripts/start.sh`(桥 + 隧道,`BRIDGE_TOKEN`/`GROK_SERVE_SECRET` 必填)。
+
+### 3.2 分步启动 grok agent serve
 
 ```sh
 GROK_SERVE_SECRET=<你自己生成的密钥,≥20字符>   # 例如 openssl rand -base64 32
@@ -38,7 +62,7 @@ grok -m glm-5-2 agent serve --bind 127.0.0.1:2419 --secret "$GROK_SERVE_SECRET" 
 - `-m` 选模型段名(`--list-models` 或 config.toml 的 `[model.xxx]`);serve 需要模型可正常出回复,换模型前先用 `grok -m <段名> -p "hi"` 探余额;
 - 启动成功会打印 `WebSocket URL: ws://127.0.0.1:2419/ws?server-key=<SECRET>`。
 
-### 3.2 启动桥
+### 3.3 分步启动桥
 
 ```sh
 cd RemoteHarness/bridge
@@ -53,13 +77,13 @@ BRIDGE_REGISTRY_FILE=/tmp/rh-sessions.json \
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `BRIDGE_TOKEN` | 空(无 token 拒绝启动) | 客户端 Bearer token;`npm run -s gen-token` 生成 |
-| `GROK_SERVE_SECRET` | 空 | 必须与 3.1 一致 |
+| `GROK_SERVE_SECRET` | 空 | 必须与 3.2 一致 |
 | `BRIDGE_PORT` | 8777 | 监听端口 |
 | `BRIDGE_BIND` | 127.0.0.1 | 监听地址 |
 | `BRIDGE_ALLOW_IPS` | 空 | 逗号分隔 IP 白名单(公网暴露强烈建议) |
 | `BRIDGE_REGISTRY_FILE` | sessions.json | 会话注册表持久化文件 |
 
-### 3.3 (可选)公网隧道
+### 3.4 (可选)公网隧道
 
 ```sh
 cloudflared tunnel --url http://127.0.0.1:8777 --no-autoupdate
@@ -67,17 +91,6 @@ cloudflared tunnel --url http://127.0.0.1:8777 --no-autoupdate
 ```
 
 iPad 端连接地址填 `wss://xxxxxxxx.trycloudflare.com`,token 不变。
-
-### 3.4 一键启动(桥 + 隧道)
-
-```sh
-cd RemoteHarness/bridge
-BRIDGE_TOKEN=$(npm run -s gen-token) GROK_SERVE_SECRET=<SECRET> ./scripts/start.sh
-# 打印 [start] 公网地址: https://...trycloudflare.com 后即可用
-# Ctrl+C 同时关闭 cloudflared 与桥(fail-closed:缺 token/secret 拒绝启动)
-```
-
-> 注意:start.sh 只负责桥与隧道,**grok serve 需先按 3.1 单独启动**。
 
 ## 4. 启动后的验证
 
