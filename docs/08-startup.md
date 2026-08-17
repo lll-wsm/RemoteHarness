@@ -1,0 +1,152 @@
+# 08 启动与测试手册
+
+> 记录完整启动流程、验证点与自动化测试命令,供后续联调/回归使用。最后更新:2026-08-17(适用 M2.5)。
+
+## 1. 架构与运行进程
+
+一条聊天链路共 4 个进程/端:
+
+```
+[iPad/iPhone Bilink]  ──wss──►  [cloudflared 隧道](可选,公网)
+                                    │
+[iPad/iPhone Bilink]  ──ws───►  [桥 bridge]  ──ws──►  [grok agent serve]
+   ({url,token})         127.0.0.1:8777        127.0.0.1:2419
+```
+
+- **grok agent serve**:被控端上的 ACP 服务(第三方模型,无需 xAI 登录);
+- **桥(node src/index.js)**:iPad 的 ACP 服务端 + grok 的 ACP 客户端,会话注册表(chatID → grok 会话)持久化到 `sessions.json`(可用 `BRIDGE_REGISTRY_FILE` 改路径);
+- **隧道(可选)**:cloudflared quick tunnel,把桥的 8777 暴露成 `https://*.trycloudflare.com`;iPad 填 wss 地址。
+
+## 2. 前置条件
+
+| 项 | 说明 |
+|---|---|
+| Node.js ≥ 18 | `node -v` 确认;桥依赖 `ws`,首次需 `cd bridge && npm install` |
+| grok CLI | 本机可 `grok -m <模型段名> -p "hi"` 直接对话 |
+| cloudflared | 公网测试才需要(`which cloudflared`) |
+| 模型 API Key | 环境变量(见 `~/.grok/config.toml` 的 `env_key`):`DEEPSEEK_API_KEY` / `OPENCODE_API_KEY` / `ANTHOER_ARK_API_KEY` 等;余额不足会 402,当前推荐 `glm-5-2`(Ark) |
+
+## 3. 启动流程
+
+### 3.1 启动 grok agent serve
+
+```sh
+GROK_SERVE_SECRET=<你自己生成的密钥,≥20字符>   # 例如 openssl rand -base64 32
+grok -m glm-5-2 agent serve --bind 127.0.0.1:2419 --secret "$GROK_SERVE_SECRET" &
+```
+
+- `-m` 选模型段名(`--list-models` 或 config.toml 的 `[model.xxx]`);serve 需要模型可正常出回复,换模型前先用 `grok -m <段名> -p "hi"` 探余额;
+- 启动成功会打印 `WebSocket URL: ws://127.0.0.1:2419/ws?server-key=<SECRET>`。
+
+### 3.2 启动桥
+
+```sh
+cd RemoteHarness/bridge
+BRIDGE_TOKEN=$(npm run -s gen-token)          # 128-bit,每次新生成
+GROK_SERVE_SECRET=$GROK_SERVE_SECRET \
+BRIDGE_REGISTRY_FILE=/tmp/rh-sessions.json \
+  node src/index.js &
+```
+
+环境变量(均可省略,有默认值):
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `BRIDGE_TOKEN` | 空(无 token 拒绝启动) | 客户端 Bearer token;`npm run -s gen-token` 生成 |
+| `GROK_SERVE_SECRET` | 空 | 必须与 3.1 一致 |
+| `BRIDGE_PORT` | 8777 | 监听端口 |
+| `BRIDGE_BIND` | 127.0.0.1 | 监听地址 |
+| `BRIDGE_ALLOW_IPS` | 空 | 逗号分隔 IP 白名单(公网暴露强烈建议) |
+| `BRIDGE_REGISTRY_FILE` | sessions.json | 会话注册表持久化文件 |
+
+### 3.3 (可选)公网隧道
+
+```sh
+cloudflared tunnel --url http://127.0.0.1:8777 --no-autoupdate
+# 输出里找: https://xxxxxxxx.trycloudflare.com
+```
+
+iPad 端连接地址填 `wss://xxxxxxxx.trycloudflare.com`,token 不变。
+
+### 3.4 一键启动(桥 + 隧道)
+
+```sh
+cd RemoteHarness/bridge
+BRIDGE_TOKEN=$(npm run -s gen-token) GROK_SERVE_SECRET=<SECRET> ./scripts/start.sh
+# 打印 [start] 公网地址: https://...trycloudflare.com 后即可用
+# Ctrl+C 同时关闭 cloudflared 与桥(fail-closed:缺 token/secret 拒绝启动)
+```
+
+> 注意:start.sh 只负责桥与隧道,**grok serve 需先按 3.1 单独启动**。
+
+## 4. 启动后的验证
+
+```sh
+# 桥健康检查(token 鉴权)
+curl -s "http://127.0.0.1:8777/healthz?token=$BRIDGE_TOKEN"
+# → {"ok":true,"grokConnected":true,"sessions":N}
+
+# 桥语法自检
+cd bridge && npm run check
+
+# 端到端文本对话(走完整 ACP 链路)
+BRIDGE_TOKEN=$BRIDGE_TOKEN node scripts/e2e.mjs ws://127.0.0.1:8777 "你好"
+BRIDGE_TOKEN=$BRIDGE_TOKEN node scripts/e2e.mjs wss://<公网URL> "你好"
+```
+
+## 5. 自动化测试(CLI,驱动真 ChatStore / SessionStore)
+
+编译(需与 App 同源,含 M2.5 会话管理):
+
+```sh
+cd Bilink
+swiftc -swift-version 5 -o /tmp/bilink-acp-test \
+  Bilink/Networking/ACPError.swift \
+  Bilink/Networking/ACPWire.swift \
+  Bilink/Networking/ACPClient.swift \
+  Bilink/Models/ChatMessage.swift \
+  Bilink/Models/SessionMeta.swift \
+  Bilink/Stores/SessionStore.swift \
+  Bilink/Stores/ChatStore.swift \
+  test/acp-client-test/main.swift
+```
+
+运行:
+
+```sh
+source <含 BRIDGE_TOKEN 的 env 文件>   # 或直接 export
+
+# 鉴权门验证(initialize 握手/错误分类)
+/tmp/bilink-acp-test connect ws://127.0.0.1:8777 "$BRIDGE_TOKEN"
+
+# 会话管理回归:清空本地状态后连跑两次
+defaults delete bilink-acp-test 2>/dev/null
+rm -f ~/Library/Application\ Support/BilinkSessions/index.json \
+      ~/Library/Application\ Support/BilinkSessions/*.json
+
+# 第一次:应新建会话 + 流式回复(消息数=2,有助手 OK)
+/tmp/bilink-acp-test chat ws://127.0.0.1:8777 "$BRIDGE_TOKEN"
+
+# 第二次:应恢复同一 chatID(未新建)+ 本地历史还原(消息数=4)
+/tmp/bilink-acp-test chat ws://127.0.0.1:8777 "$BRIDGE_TOKEN"
+```
+
+通过判定:两次均打印 `✅ 聊天链路验证通过`;第二次打印 `✅ 重开恢复了最近会话(未新建)` 与历史消息。
+
+## 6. 停止
+
+```sh
+# 桥/隧道是 start.sh 起的 → 直接 Ctrl+C
+# 手动起的:
+kill <bridge_pid> <grok_serve_pid>   # cloudflared 同理会话结束才停
+```
+
+## 7. 常见问题
+
+| 现象 | 原因与处理 |
+|---|---|
+| 会话错误横幅 "API 额度不足" | 模型账户余额耗尽(402);换 `grok -m <其他段名> -p "hi"` 探测可用模型后重启 serve。DeepSeek 直连 / opencode 网关当前均欠费,推荐 `glm-5-2` |
+| `session/new` 返回 Invalid params | 客户端会话未创建成功(M2.5 之前的 isPreparing 拦截 bug 已修);确认桥日志无异常、serve 已就绪 |
+| 重开 App 变"新会话" | 老版本行为;M2.5 起恢复最近会话,`session/load` 失败也会保留本地历史并提示 |
+| 桥启动即退出 | 未设 `BRIDGE_TOKEN`/`GROK_SERVE_SECRET`(fail-closed);检查环境变量 |
+| 图标显示旧样式 | iOS 图标缓存;重装后重启设备或切换壁纸刷新 |

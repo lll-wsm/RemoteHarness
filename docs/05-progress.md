@@ -53,7 +53,9 @@
 ### M4:发布与迭代决策
 - 验证 OK 后进入正式发布准备(TestFlight / App Store);视评估决定是否提供 Mac 客户端等延伸。
 
-## 4. 常用启动流程(备忘)
+## 4. 启动与测试
+
+完整启动流程、验证点、自动化测试命令与常见问题,见 **docs/08-startup.md**。要点:
 
 ```sh
 # 1) grok agent serve(第三方模型,无需 xAI 登录;余额可用时选 glm-5-2)
@@ -61,11 +63,8 @@ grok -m glm-5-2 agent serve --bind 127.0.0.1:2419 --secret <SECRET> &
 
 # 2) 桥 + 隧道(一键)
 cd RemoteHarness/bridge
-export BRIDGE_TOKEN=$(npm run -s gen-token)
-export GROK_SERVE_SECRET=<SECRET>
-./scripts/start.sh          # Ctrl+C 停止
+BRIDGE_TOKEN=$(npm run -s gen-token) GROK_SERVE_SECRET=<SECRET> ./scripts/start.sh
 
-# 3) 测试
+# 3) 测试(详见 08):e2e.mjs / swiftc CLI 双跑回归(重开恢复同一会话)
 BRIDGE_TOKEN=$BRIDGE_TOKEN node scripts/e2e.mjs ws://127.0.0.1:8777 "你好"
-BRIDGE_TOKEN=$BRIDGE_TOKEN node scripts/e2e.mjs wss://<公网URL> "你好"
 ```
