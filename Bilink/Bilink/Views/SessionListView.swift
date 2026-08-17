@@ -2,8 +2,10 @@ import SwiftUI
 
 /// 历史会话列表:「本地会话」/「桥上发现」两段,支持搜索、切换、新建、
 /// 重命名、删除(远端同步,经 ChatStore.deleteSession)。
+/// 直接持有 SessionStore:远端合并/删除/重命名等异步变更会实时刷新。
 struct SessionListView: View {
-    let sessions: [SessionMeta]
+    let sessionStore: SessionStore
+    let profileID: UUID
     let currentChatID: String?
     let onSelect: (SessionMeta) -> Void
     let onNew: () -> Void
@@ -14,6 +16,8 @@ struct SessionListView: View {
     @State private var renameTarget: SessionMeta?
     @State private var renameTitle = ""
     @State private var showingRenameAlert = false
+
+    private var sessions: [SessionMeta] { sessionStore.sessions(for: profileID) }
 
     private var filtered: [SessionMeta] {
         guard !searchText.isEmpty else { return sessions }
@@ -33,6 +37,12 @@ struct SessionListView: View {
                         "暂无历史会话",
                         systemImage: "clock.arrow.circlepath",
                         description: Text("每次对话都会自动保存,可随时回来继续")
+                    )
+                } else if filtered.isEmpty {
+                    ContentUnavailableView(
+                        "无匹配结果",
+                        systemImage: "magnifyingglass",
+                        description: Text("换个关键词试试")
                     )
                 } else {
                     List {

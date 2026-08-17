@@ -44,14 +44,19 @@ final class ChatStore {
         errorMessage = nil
         if let stored = sessionStore.latest(for: profileID) {
             await resume(chatID: stored)
-        } else if let remote = await syncRemoteSessions() {
-            let ok = await resume(chatID: remote)
-            if !ok {
-                // 桥上发现但已失效(已移除死条目),直接新建
+        } else {
+            // 桥上远端发现:逐条尝试恢复,死会话(resume 失败)会被移除,直到成功或耗尽
+            _ = await syncRemoteSessions()
+            var resumed = false
+            for remoteID in sessionStore.remoteOnlyIDs(for: profileID) {
+                if await resume(chatID: remoteID) {
+                    resumed = true
+                    break
+                }
+            }
+            if !resumed {
                 await createSession()
             }
-        } else {
-            await createSession()
         }
     }
 
@@ -141,7 +146,11 @@ final class ChatStore {
         replayEndTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             guard !Task.isCancelled else { return }
-            await MainActor.run { self?.isReplayingHistory = false }
+            await MainActor.run {
+                self?.isReplayingHistory = false
+                // 回放窗口结束即视为已打开使用(远端条目翻转为本地,移出「桥上发现」)
+                self?.touchSessionMeta()
+            }
         }
     }
 
@@ -171,7 +180,8 @@ final class ChatStore {
                 await startNewSession()
             }
         } catch {
-            errorMessage = "删除失败:需在线删除(本地记录已保留)"
+            let detail = (error as? ACPError)?.errorDescription ?? String(describing: error)
+            errorMessage = "删除失败:\(detail)(本地记录已保留)"
         }
     }
 

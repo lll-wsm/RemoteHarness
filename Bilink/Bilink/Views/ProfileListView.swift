@@ -123,7 +123,9 @@ struct ProfileListView: View {
                                       profileID: profile.id)
         Task {
             await store.connect(config)
-            if store.state == .connected {
+            // 在途期间 profile 可能被删除:仅当仍存在且连接成功时才刷新 lastUsedAt
+            if store.state == .connected,
+               profileStore.profiles.contains(where: { $0.id == profile.id }) {
                 profileStore.touch(profile)
             }
         }

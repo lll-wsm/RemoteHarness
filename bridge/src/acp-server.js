@@ -27,6 +27,7 @@ export class AcpServer {
     this.connSessions = new Map(); // conn -> chatID
     this.sessionConns = new Map(); // chatID -> conn
     this.grokSessionConns = new Map(); // grokSessionId -> conn
+    this.grokSessionChatIDs = new Map(); // grokSessionId -> chatID(与 conns 同步,供通知注入)
 
     grok.onNotification((notification) => this.routeNotification(notification));
   }
@@ -120,9 +121,15 @@ export class AcpServer {
       cwd: msg.params?.cwd ?? this.defaultCwd,
       mcpServers: msg.params?.mcpServers ?? [],
     };
-    const resp = await this.grok.request("session/new", params);
+    let resp;
+    try {
+      resp = await this.grok.request("session/new", params);
+    } catch (err) {
+      // grok 断连/超时:异常也要回滚,不留 grokSessionId=null 的孤儿记录
+      this.sessions.remove(record.chatID);
+      throw err;
+    }
     if (resp.error) {
-      // 失败回滚:不留 grokSessionId=null 的孤儿记录(永远无法 load)
       this.sessions.remove(record.chatID);
       this.replyError(ws, msg.id, resp.error.code ?? -32603, resp.error.message ?? "grok 错误");
       return;
@@ -154,7 +161,8 @@ export class AcpServer {
     if (!record) return this.replyError(ws, msg.id, -32602, `未知会话: ${chatID}`);
     if (record.grokSessionId) {
       try {
-        await this.grok.request("session/close", { sessionId: record.grokSessionId });
+        // close 只是尽力而为,3s 超时即放弃,避免删除请求被 grok 卡住拖 30s
+        await this.grok.request("session/close", { sessionId: record.grokSessionId }, 3000);
       } catch (err) {
         console.warn(`[bridge] sessions/remove: grok close 失败(忽略): ${err.message}`);
       }
@@ -226,20 +234,27 @@ export class AcpServer {
 
   routeNotification(notification) {
     const sessionId = notification.params?.sessionId ?? notification.params?.session?.id ?? null;
-    let conn = null;
-    if (sessionId) {
+    let conn = sessionId ? this.grokSessionConns.get(sessionId) : null;
+    let chatID = sessionId ? this.grokSessionChatIDs.get(sessionId) : null;
+    if (!conn && sessionId) {
+      // Map miss(通知先于 bind 到达等):回落注册表查找,避免每条通知 O(n)
       const record = this.sessions.list().find((r) => r.grokSessionId === sessionId);
-      const chatID = record?.chatID ?? null;
-      if (!chatID) return;
+      if (!record) return;
+      chatID = record.chatID;
       conn = this.sessionConns.get(chatID);
-      if (conn) this.grokSessionConns.set(sessionId, conn);
-      // 注入桥侧的 chatID,客户端据此只处理当前会话的事件(多会话切换防串流)
+      if (conn) {
+        this.grokSessionConns.set(sessionId, conn);
+        this.grokSessionChatIDs.set(sessionId, chatID);
+      }
+    }
+    if (!conn || conn.readyState !== WebSocket.OPEN) return;
+    // 注入桥侧的 chatID,客户端据此只处理当前会话的事件(多会话切换防串流)
+    if (sessionId && chatID) {
       notification = {
         ...notification,
         params: { ...(notification.params ?? {}), chatID },
       };
     }
-    if (!conn || conn.readyState !== WebSocket.OPEN) return;
     conn.send(JSON.stringify(notification));
   }
 
@@ -248,12 +263,18 @@ export class AcpServer {
     if (prev && prev !== chatID) this.sessionConns.delete(prev);
     this.connSessions.set(ws, chatID);
     this.sessionConns.set(chatID, ws);
-    if (grokSessionId) this.grokSessionConns.set(grokSessionId, ws);
+    if (grokSessionId) {
+      this.grokSessionConns.set(grokSessionId, ws);
+      this.grokSessionChatIDs.set(grokSessionId, chatID);
+    }
   }
 
   unbindConn(ws, chatID) {
     const record = this.sessions.get(chatID);
-    if (record?.grokSessionId) this.grokSessionConns.delete(record.grokSessionId);
+    if (record?.grokSessionId) {
+      this.grokSessionConns.delete(record.grokSessionId);
+      this.grokSessionChatIDs.delete(record.grokSessionId);
+    }
     if (this.connSessions.get(ws) === chatID) this.connSessions.delete(ws);
     this.sessionConns.delete(chatID);
   }

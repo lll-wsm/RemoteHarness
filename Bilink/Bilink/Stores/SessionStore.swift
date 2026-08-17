@@ -40,6 +40,11 @@ final class SessionStore {
         sessions(for: profileID).first { $0.isRemoteOnly }?.chatID
     }
 
+    /// 桥上发现的全部条目(按更新倒序),用于逐条尝试恢复/清理死会话。
+    func remoteOnlyIDs(for profileID: UUID) -> [String] {
+        sessions(for: profileID).filter { $0.isRemoteOnly }.map(\.chatID)
+    }
+
     func meta(chatID: String) -> SessionMeta? {
         sessions.first { $0.chatID == chatID }
     }
@@ -61,7 +66,8 @@ final class SessionStore {
                     meta.title = truncate(first.text)
                 }
             }
-            if meta.isRemoteOnly && !messages.isEmpty {
+            if meta.isRemoteOnly {
+                // 打开过(回放窗口结束或首条消息落盘)即视为本地使用,移出「桥上发现」分段
                 meta.isRemoteOnly = false
             }
             meta.updatedAt = now

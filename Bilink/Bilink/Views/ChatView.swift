@@ -9,12 +9,27 @@ struct ChatView: View {
     @State private var showSessions = false
 
     var body: some View {
-        Group {
-            if let chatStore {
-                ChatContent(store: store, config: config, chatStore: chatStore)
-            } else {
-                ProgressView("创建远程会话…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+        NavigationStack {
+            Group {
+                if let chatStore {
+                    ChatContent(store: store, config: config, chatStore: chatStore)
+                } else {
+                    ProgressView("创建远程会话…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .navigationTitle(config.name)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showSessions = true
+                    } label: {
+                        Label("会话", systemImage: "clock")
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("断开") { store.disconnect() }
+                }
             }
         }
         .task {
@@ -26,22 +41,11 @@ struct ChatView: View {
                 chatStore = chat
             }
         }
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    showSessions = true
-                } label: {
-                    Label("会话", systemImage: "clock")
-                }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("断开") { store.disconnect() }
-            }
-        }
         .sheet(isPresented: $showSessions) {
             if let chatStore {
                 SessionListView(
-                    sessions: sessionStore.sessions(for: config.profileID),
+                    sessionStore: sessionStore,
+                    profileID: config.profileID,
                     currentChatID: chatStore.chatID,
                     onSelect: { meta in
                         showSessions = false
